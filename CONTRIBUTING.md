@@ -64,6 +64,8 @@ A breaking change adds `!` after the type (`feat!:`), and says what breaks in th
 
 The release pull request changes `CHANGELOG.md` and the version in `plugin.json` and `.github/plugin/marketplace.json`. Do not edit those by hand, and do not push to the `release` branch.
 
+`main` and `release` are protected against deletion and force pushes. The release workflow only ever moves `release` forward.
+
 CI on the release pull request waits for a maintainer, because the pull request is opened by a workflow. Select "Approve and run" on it before merging.
 
 To hold a change back from a release, keep it off `main`. To release a specific version number, add `Release-As: X.Y.Z` to the body of a commit on `main`.

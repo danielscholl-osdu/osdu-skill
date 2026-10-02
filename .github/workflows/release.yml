@@ -25,4 +25,4 @@ jobs:
           ref: ${{ steps.release.outputs.tag_name }}
       - name: Move the release branch to the new tag
         if: steps.release.outputs.release_created
-        run: git push --force origin HEAD:refs/heads/release
+        run: git push origin HEAD:refs/heads/release
