@@ -6,7 +6,8 @@
 plugin.json              Copilot plugin manifest
 skills/<name>/SKILL.md   What Copilot reads when the skill triggers
 skills/<name>/scripts/   Scripts the skill runs
-skills/<name>/reference/ Detail Copilot loads only when it needs it
+skills/<name>/references/ Detail Copilot loads only when it needs it
+skills/<name>/assets/     Files a skill copies or builds from
 tests/                   Offline tests
 ```
 
@@ -36,7 +37,7 @@ copilot --plugin-dir .
 
 ## Writing SKILL.md
 
-Copilot reads the `description` to decide whether to load the skill, and the body to decide what to do. Describe categories of intent in the description, not lists of example phrases. In the body, state what the person needs and why each constraint exists; keep exact commands for the steps where only one sequence is safe. Put detail in `reference/` and link to it.
+Copilot reads the `description` to decide whether to load the skill, and the body to decide what to do. Describe categories of intent in the description, not lists of example phrases. In the body, state what the person needs and why each constraint exists; keep exact commands for the steps where only one sequence is safe. Put detail in `references/` and link to it.
 
 ## Pull requests
 

@@ -16,7 +16,7 @@ description: Manage people and groups in a Microsoft Entra ID (Azure AD) tenant.
 | Create a security group | `group create --name NAME --description TEXT` |
 | Add existing users to groups | `group add --group G --email A,B` |
 
-Full options, output fields, and error codes are in [reference/commands.md](reference/commands.md).
+Full options, output fields, and error codes are in [references/commands.md](references/commands.md).
 
 ## Changes are planned first, then applied
 
@@ -48,12 +48,12 @@ Some groups carry directory roles or broad cloud access. The script treats a gro
 
 `check` reports the signed-in identity, its directory roles, the tenant's invitation and group-creation policy, and which operations that combination should allow. Use it before a first change in a tenant and whenever a command fails with `http_403`.
 
-If a capability is missing, say which role or setting would provide it ([reference/permissions.md](reference/permissions.md)) and that a tenant administrator has to grant it. Granting a role, changing tenant policy, or consenting to permissions widens what an account can do across the whole tenant, so none of them is a way past a refused command. Each is its own request for an administrator to make deliberately.
+If a capability is missing, say which role or setting would provide it ([references/permissions.md](references/permissions.md)) and that a tenant administrator has to grant it. Granting a role, changing tenant policy, or consenting to permissions widens what an account can do across the whole tenant, so none of them is a way past a refused command. Each is its own request for an administrator to make deliberately.
 
 A role granted moments ago is not in the current token. `az logout` followed by `az login --tenant TENANT_ID` picks it up.
 
 ## Related work
 
-- Onboarding a partner team end to end, including the Azure resource group and role assignment that usually follow: [reference/partner-onboarding.md](reference/partner-onboarding.md)
-- Errors and what to do about each: [reference/troubleshooting.md](reference/troubleshooting.md)
+- Onboarding a partner team end to end, including the Azure resource group and role assignment that usually follow: [references/partner-onboarding.md](references/partner-onboarding.md)
+- Errors and what to do about each: [references/troubleshooting.md](references/troubleshooting.md)
 - OSDU or ADME entitlements are separate from Entra groups and are not handled here.

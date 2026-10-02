@@ -31,9 +31,19 @@ for skill in skills:
         for target in re.findall(r"\]\((?!https?://|#)([^)#]+)", document.read_text()):
             if not (document.parent / target).exists():
                 errors.append(f"{document.relative_to(ROOT)}: broken link {target}")
-    for reference in re.findall(r"scripts/[\w.-]+", text):
-        if not (skill / reference).exists():
-            errors.append(f"{skill.name}: SKILL.md names missing {reference}")
+    for document in skill.rglob("*.md"):
+        for named in set(re.findall(r"`((?:scripts|references|assets)/[\w./-]+)`", document.read_text())):
+            if not (skill / named).exists():
+                errors.append(f"{document.relative_to(ROOT)}: names missing {named}")
+    for page in skill.rglob("*.html"):
+        html = page.read_text()
+        if re.search(r"""(?:src|href)=["'](?:https?:)?//""", html) or "@import" in html:
+            errors.append(f"{page.relative_to(ROOT)}: loads an external resource")
+        ids = re.findall(r"""\bid=["']([^"']+)""", html)
+        if len(ids) != len(set(ids)):
+            errors.append(f"{page.relative_to(ROOT)}: duplicate id")
+        if 'data-theme="dark"' not in html or "prefers-color-scheme:dark" not in html:
+            errors.append(f"{page.relative_to(ROOT)}: missing a dark theme")
 
 for error in errors:
     print(error)

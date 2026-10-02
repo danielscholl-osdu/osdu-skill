@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab tenant user management</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f3f5f4;--surface:#ffffff;--surface-2:#e9eeec;--line:#cbd5d0;--line-strong:#697b72;
+  --ink:#1a2320;--ink-2:#48554f;--ink-3:#53665c;
+  --o1:#3d5aa8;--o1-bg:#e6ebf8;--o1-ink:#2b4180;
+  --o2:#7a4aa6;--o2-bg:#efe6f7;--o2-ink:#5a3380;
+  --o3:#0e7070;--o3-bg:#dcf2f1;--o3-ink:#0a5a5a;
+  --o4:#566873;--o4-bg:#eaeef0;--o4-ink:#45535c;
+  --pill-ink:#ffffff;--ok:#246c43;--ok-bg:#dff0e5;--warn:#7a5200;--warn-bg:#f6e9c8;--bad:#a03228;--bad-bg:#f5dcd8;
+  --term:#14201d;--term-ink:#dfe8e4;--term-dim:#a5b9af;--term-red:#f08a7e;--term-green:#7fd1a0;--term-cyan:#7cc8c8;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#121817;--surface:#1a2220;--surface-2:#222d2a;--line:#41544b;--line-strong:#91a59a;
+    --ink:#e6ecea;--ink-2:#b3bfba;--ink-3:#a1b2a9;
+    --o1:#8b9ae6;--o1-bg:#232b49;--o1-ink:#c3cbf5;
+    --o2:#b08ad9;--o2-bg:#2c2140;--o2-ink:#d9c6f0;
+    --o3:#45bdbd;--o3-bg:#123636;--o3-ink:#a3e3e3;
+    --o4:#93a3ad;--o4-bg:#242d33;--o4-ink:#c4cfd6;
+    --pill-ink:#121817;--ok:#7fd1a0;--ok-bg:#173226;--warn:#e3b964;--warn-bg:#3a2d10;--bad:#f08a7e;--bad-bg:#3d1f1b;--term:#0c1311;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#121817;--surface:#1a2220;--surface-2:#222d2a;--line:#41544b;--line-strong:#91a59a;
+  --ink:#e6ecea;--ink-2:#b3bfba;--ink-3:#a1b2a9;
+  --o1:#8b9ae6;--o1-bg:#232b49;--o1-ink:#c3cbf5;
+  --o2:#b08ad9;--o2-bg:#2c2140;--o2-ink:#d9c6f0;
+  --o3:#45bdbd;--o3-bg:#123636;--o3-ink:#a3e3e3;
+  --o4:#93a3ad;--o4-bg:#242d33;--o4-ink:#c4cfd6;
+  --pill-ink:#121817;--ok:#7fd1a0;--ok-bg:#173226;--warn:#e3b964;--warn-bg:#3a2d10;--bad:#f08a7e;--bad-bg:#3d1f1b;--term:#0c1311;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55}
+.wrap{max-width:1120px;margin:0 auto;padding:32px 20px 64px}
+h1{font-size:clamp(26px,4vw,36px);font-weight:600;letter-spacing:-.01em;margin:0 0 10px;text-wrap:balance}
+h2{font-size:22px;font-weight:600;margin:0 0 8px;text-wrap:balance}
+h3{font-size:16px;font-weight:600;margin:0 0 6px}
+p{margin:0 0 10px;max-width:76ch;color:var(--ink-2)}
+p.lead{font-size:17px;color:var(--ink);max-width:66ch}
+a{color:var(--o1-ink);text-underline-offset:3px;overflow-wrap:anywhere}
+a:focus-visible{outline:2px solid var(--o1);outline-offset:3px}
+section{margin-top:40px;padding-top:26px;border-top:1px solid var(--line)}
+code{font-family:var(--mono);font-size:.92em;overflow-wrap:anywhere}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px}
+.problem{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 22px}
+.problem p{max-width:78ch}
+.problem p:last-child{margin-bottom:0}
+.legend-label{margin-top:24px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:14px}
+.owner{display:inline-flex;align-items:baseline;gap:7px;font-weight:600}
+.owner::before{content:"";width:10px;height:10px;border-radius:2px;background:var(--c);flex:none}
+.o-o1{--c:var(--o1);color:var(--o1-ink)}.o-o2{--c:var(--o2);color:var(--o2-ink)}
+.o-o3{--c:var(--o3);color:var(--o3-ink)}.o-o4{--c:var(--o4);color:var(--o4-ink)}
+.status{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:4px}
+.status.ok{background:var(--ok-bg);color:var(--ok)}.status.bad{background:var(--bad-bg);color:var(--bad)}
+.status.warn{background:var(--warn-bg);color:var(--warn)}.status.note{background:var(--surface-2);color:var(--ink-2)}
+.sev{white-space:nowrap}.legend .status{margin-right:6px}.legend span{color:var(--ink-2)}
+.flow{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 16px;overflow-x:auto}
+.flow svg{display:block;width:100%;height:auto;min-width:1000px}
+.flow text{font-family:var(--sans);fill:var(--ink);font-size:12px}
+.flow .t{font-size:14px;font-weight:600}.flow .mono{font-family:var(--mono)}
+.flow .sub{fill:var(--ink-2)}.flow .tiny{fill:var(--ink-3);font-size:11px}
+.flow .box{rx:8;stroke-width:1.3}
+.flow .b-o1{fill:var(--o1-bg);stroke:var(--o1)}.flow .b-o2{fill:var(--o2-bg);stroke:var(--o2)}
+.flow .b-o3{fill:var(--o3-bg);stroke:var(--o3)}.flow .b-o4{fill:var(--o4-bg);stroke:var(--o4)}
+.flow .b-ok{fill:var(--ok-bg);stroke:var(--ok)}.flow .b-warn{fill:var(--warn-bg);stroke:var(--warn)}.flow .b-bad{fill:var(--bad-bg);stroke:var(--bad)}
+.flow .b-mute{fill:var(--surface-2);stroke:var(--line-strong);stroke-dasharray:4 3}
+.flow .decision{fill:var(--surface-2);stroke:var(--line-strong);stroke-width:1.3}
+.flow .chip{rx:4;fill:var(--surface-2);stroke:var(--line-strong);stroke-width:1.1}
+.flow .chip-dashed{stroke-dasharray:4 3}.flow .chipt{font-size:12px;fill:var(--ink)}
+.flow .p-o1{fill:var(--o1)}.flow .p-o2{fill:var(--o2)}.flow .p-o3{fill:var(--o3)}.flow .p-o4{fill:var(--o4)}
+.flow .pillt{font-size:11px;font-weight:600;fill:var(--pill-ink)}
+.flow .arrow{stroke:var(--line-strong);stroke-width:1.5;fill:none}
+.flow .arrow.ok{stroke:var(--ok)}.flow .arrow.bad{stroke:var(--bad);stroke-dasharray:5 4}
+.flow .lanebg{rx:10;fill:none;stroke:var(--line);stroke-dasharray:3 4}
+.flow .lanelbl{font-size:12px;font-weight:600;letter-spacing:.06em;fill:var(--ink-3)}
+.note{font-size:13px;color:var(--ink-3);margin-top:10px}
+.tblwrap{overflow-x:auto;margin-top:16px}
+.tbl{width:100%;min-width:640px;border-collapse:collapse;background:var(--surface);font-size:14px}
+.tbl th{text-align:left;font-size:12px;color:var(--ink-3);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.tbl th:first-child{width:20%;min-width:140px}
+.tbl td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2);overflow-wrap:anywhere}
+.tbl tr:last-child td{border-bottom:none}.tbl.compact td{padding:8px 12px}
+.cond{font-family:var(--mono);font-size:13px;line-height:1.5;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow-x:auto;color:var(--ink)}
+.cond code{overflow-wrap:normal}
+.terminal{margin-top:16px;background:var(--term);color:var(--term-ink);border-radius:10px;padding:16px 18px;font-family:var(--mono);font-size:13px;line-height:1.5;overflow-x:auto;white-space:pre}
+.terminal .d{color:var(--term-dim)}.terminal .r{color:var(--term-red)}.terminal .g{color:var(--term-green)}.terminal .c{color:var(--term-cyan)}
+.callout{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--ink-2);border-radius:10px;padding:12px 16px;margin-top:14px;color:var(--ink-2)}
+.appendix{margin-top:48px;padding-top:26px;border-top:3px solid var(--line)}
+.appendix h2{font-size:20px}.appendix section{margin-top:26px;padding-top:20px}
+@media(max-width:520px){.wrap{padding:24px 16px 40px}.problem{padding:16px}.tbl th,.tbl td{padding:8px}}
+@media print{body{background:white;color:black}.wrap{max-width:none;padding:0}.flow svg{min-width:0}.flow,.tblwrap{overflow:visible}section{break-inside:avoid}.problem{break-inside:avoid}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <p class="eyebrow">Illustrative report / fictional tenant / findings as of 2 March 2026</p>
+    <h1>Who can manage users in the lab tenant</h1>
+    <p class="lead">One person can manage users fully. One delegate can invite guests and nothing more.</p>
+  </header>
+  <div class="problem">
+    <p>This report examines who can create, invite, change, and remove user accounts in the lab tenant. It is based on directory role assignments, the guest invitation policy, and application permissions, read through the directory API on 2 March 2026.</p>
+    <p>Two accounts held by one person can manage users fully. One delegate can invite guests. Four service principals can create or change users. There are four findings: one high, two medium, and one note.</p>
+    <p>Role assignments that are eligible but not activated could not be read with the access used, so a person holding an inactive role would not appear here. Whether the service principals' credentials still work was not checked.</p>
+  </div>
+  <p class="eyebrow legend-label">Colors identify the route to user management</p>
+  <div class="legend" aria-label="Routes">
+    <span class="owner o-o1">Person with a directory role</span>
+    <span class="owner o-o2">Group that holds a role</span>
+    <span class="owner o-o3">Application with a permission</span>
+  </div>
+  <p class="eyebrow legend-label">Severity</p>
+  <div class="legend" aria-label="Severity scale">
+    <span><span class="status bad">High</span>blocks user management now, or can with no further step</span>
+    <span><span class="status warn">Medium</span>causes harm under conditions that are plausible here</span>
+    <span><span class="status note">Note</span>relevant, no action expected</span>
+  </div>
+  <section>
+    <h2>Routes to user management</h2>
+    <p>Three routes reach the same directory. Each allows a different set of operations.</p>
+    <div class="flow" tabindex="0" role="region" aria-label="Routes diagram, scroll horizontally on small screens">
+      <svg viewBox="0 0 1000 308" role="img" aria-labelledby="routes-title" aria-describedby="routes-description">
+        <title id="routes-title">Three routes to user management</title>
+        <desc id="routes-description">Two administrator accounts held by one person can create, change, and remove users. An inviters group with one member can only invite guests. Four service principals can create and change users. All three act on the same tenant directory.</desc>
+        <defs>
+          <marker id="routes-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--line-strong)"/></marker>
+        </defs>
+        <path d="M324 62 L656 118" class="arrow" marker-end="url(#routes-arrow)"/>
+        <path d="M324 154 L656 154" class="arrow" marker-end="url(#routes-arrow)"/>
+        <path d="M324 246 L656 190" class="arrow" marker-end="url(#routes-arrow)"/>
+        <text x="340" y="48" class="sub">create, invite, change, remove</text>
+        <text x="340" y="144" class="sub">invite only</text>
+        <text x="340" y="270" class="sub">create and change</text>
+        <rect x="24" y="24" width="300" height="76" class="box b-o1"/>
+        <text x="36" y="48" class="t">Administrator accounts</text>
+        <text x="36" y="70" class="sub">2 accounts, 1 person</text>
+        <text x="36" y="88" class="tiny">Global Administrator role</text>
+        <rect x="24" y="116" width="300" height="76" class="box b-o2"/>
+        <text x="36" y="140" class="t">Inviters group</text>
+        <text x="36" y="162" class="sub">1 member</text>
+        <text x="36" y="180" class="tiny">Holds the Guest Inviter role</text>
+        <rect x="24" y="208" width="300" height="76" class="box b-o3"/>
+        <text x="36" y="232" class="t">Service principals</text>
+        <text x="36" y="254" class="sub">4 applications</text>
+        <text x="36" y="272" class="tiny">Directory or user write permission</text>
+        <rect x="660" y="104" width="316" height="100" class="box b-o4"/>
+        <text x="672" y="128" class="t">Tenant directory</text>
+        <text x="672" y="150" class="sub">User and guest accounts</text>
+        <text x="672" y="172" class="sub">Group membership</text>
+        <text x="672" y="192" class="tiny">Every route acts on the same accounts</text>
+      </svg>
+    </div>
+    <div class="tblwrap">
+      <table class="tbl">
+        <thead><tr><th scope="col">Identity</th><th scope="col">Route</th><th scope="col">Can do</th><th scope="col">Cannot do</th></tr></thead>
+        <tbody>
+          <tr><td>Avery Chen (guest account)</td><td>Global Administrator</td><td>Everything</td><td></td></tr>
+          <tr><td>Avery Chen (admin account)</td><td>Global Administrator</td><td>Everything</td><td></td></tr>
+          <tr><td>Sam Okafor</td><td>Member of the inviters group</td><td>Invite guests</td><td>Change, remove, or add anyone to a group</td></tr>
+          <tr><td>Four service principals</td><td>Application permission</td><td>Create and change users</td><td>Remove users</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The tenant's invitation policy limits inviting to administrators and holders of the Guest Inviter role.</p>
+  </section>
+  <section>
+    <h2>Findings</h2>
+    <div class="tblwrap">
+      <table class="tbl">
+        <thead><tr><th scope="col">Severity</th><th scope="col">Finding</th><th scope="col">Consequence</th><th scope="col">Recommendation</th></tr></thead>
+        <tbody>
+          <tr><td class="sev"><span class="status bad">High</span></td><td>No second person can manage users</td><td>If Avery Chen is unavailable, nobody can remove, restore, or change an account</td><td>Assign User Administrator to a second person. The tenant owner decides who.</td></tr>
+          <tr><td class="sev"><span class="status warn">Medium</span></td><td>Four service principals hold user-write permission granted between 2021 and 2023</td><td>A leaked credential for any of them can create accounts</td><td>Confirm each is unused, then remove the permission</td></tr>
+          <tr><td class="sev"><span class="status warn">Medium</span></td><td>The delegate can invite but cannot finish onboarding</td><td>Every invited guest waits for the administrator to add them to a group</td><td>Make the delegate an owner of the groups they onboard into</td></tr>
+          <tr><td class="sev"><span class="status note">Note</span></td><td>Ordinary members cannot invite guests</td><td>Invitations stay with named people</td><td>None</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <section>
+    <h2>Single administrator</h2>
+    <p>Both Global Administrator accounts belong to Avery Chen: a guest account from the home organization and a separate account created in the tenant. No account holds User Administrator or Privileged Role Administrator.</p>
+    <p>The second account protects against losing access to the home organization. It does not protect against the person being unavailable, because both accounts are the same person.</p>
+  </section>
+  <section>
+    <h2>Service principals</h2>
+    <p>Four applications hold a permission that lets them create and change users without a signed-in person. The permissions were granted between May 2021 and July 2023.</p>
+    <p>They are likely left over from retired deployments, because three of the four are named after environments that no longer exist. That is an inference from the names. Sign-in logs would confirm it and were not read.</p>
+  </section>
+  <section>
+    <h2>Recommendations</h2>
+    <div class="tblwrap">
+      <table class="tbl">
+        <thead><tr><th scope="col">Order</th><th scope="col">Action</th><th scope="col">Answers</th><th scope="col">Who</th></tr></thead>
+        <tbody>
+          <tr><td>First</td><td>Assign User Administrator to a second person</td><td>No second person can manage users</td><td>Tenant owner decides; administrator assigns</td></tr>
+          <tr><td>Second</td><td>Read sign-in logs for the four service principals and remove the permission from those unused</td><td>Service principals with user-write permission</td><td>Administrator</td></tr>
+          <tr><td>Third</td><td>Make the delegate an owner of the onboarding groups</td><td>Delegate cannot finish onboarding</td><td>Administrator</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>User Administrator is recommended over a second Global Administrator because it covers user and group management without control of the whole tenant.</p>
+  </section>
+  <div class="appendix">
+    <h2>Reference detail</h2>
+    <section>
+      <h3>Appendix A: method</h3>
+      <div class="tblwrap">
+        <table class="tbl compact">
+          <thead><tr><th scope="col">Question</th><th scope="col">Read</th><th scope="col">Result</th></tr></thead>
+          <tbody>
+            <tr><td>Who holds a directory role</td><td>Active role assignments, with the principal expanded</td><td>Read in full</td></tr>
+            <tr><td>Who can invite</td><td>The tenant authorization policy</td><td>Read in full</td></tr>
+            <tr><td>Which applications can write users</td><td>Application permission grants on the directory API</td><td>Read in full</td></tr>
+            <tr><td>Who holds an eligible role</td><td>Role eligibility schedules</td><td>Denied: the access used lacks the scope</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section>
+      <h3>Appendix B: service principals</h3>
+      <div class="tblwrap">
+        <table class="tbl compact">
+          <thead><tr><th scope="col">Application</th><th scope="col">Permission</th><th scope="col">Granted</th></tr></thead>
+          <tbody>
+            <tr><td>lab-alpha-deploy</td><td>Directory write</td><td>May 2021</td></tr>
+            <tr><td>lab-alpha-terraform</td><td>Directory write</td><td>May 2021</td></tr>
+            <tr><td>sandbox-client</td><td>User write</td><td>October 2021</td></tr>
+            <tr><td>lab-gamma-deploy</td><td>Directory write</td><td>July 2023</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+</body>
+</html>

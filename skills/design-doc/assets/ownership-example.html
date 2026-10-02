@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schema loader ownership</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f3f5f4;--surface:#ffffff;--surface-2:#e9eeec;--line:#cbd5d0;--line-strong:#697b72;
+  --ink:#1a2320;--ink-2:#48554f;--ink-3:#53665c;
+  --o1:#3d5aa8;--o1-bg:#e6ebf8;--o1-ink:#2b4180;
+  --o2:#7a4aa6;--o2-bg:#efe6f7;--o2-ink:#5a3380;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#121817;--surface:#1a2220;--surface-2:#222d2a;--line:#41544b;--line-strong:#91a59a;
+    --ink:#e6ecea;--ink-2:#b3bfba;--ink-3:#a1b2a9;
+    --o1:#8b9ae6;--o1-bg:#232b49;--o1-ink:#c3cbf5;
+    --o2:#b08ad9;--o2-bg:#2c2140;--o2-ink:#d9c6f0;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#121817;--surface:#1a2220;--surface-2:#222d2a;--line:#41544b;--line-strong:#91a59a;
+  --ink:#e6ecea;--ink-2:#b3bfba;--ink-3:#a1b2a9;
+  --o1:#8b9ae6;--o1-bg:#232b49;--o1-ink:#c3cbf5;
+  --o2:#b08ad9;--o2-bg:#2c2140;--o2-ink:#d9c6f0;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55}
+.wrap{max-width:1120px;margin:0 auto;padding:32px 20px 64px}
+h1{font-size:clamp(26px,4vw,36px);font-weight:600;margin:0 0 10px}
+h2{font-size:22px;font-weight:600;margin:0 0 8px}
+h3{font-size:16px;font-weight:600;margin:0 0 6px}
+p{margin:0 0 10px;max-width:76ch;color:var(--ink-2)}
+.lead{font-size:17px;color:var(--ink)}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.problem{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 22px}
+.problem p:last-child{margin-bottom:0}
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:14px}
+.legend-label{margin-top:24px}
+.owner{display:inline-flex;align-items:baseline;gap:7px;font-weight:600}
+.owner::before{content:"";width:10px;height:10px;border-radius:2px;background:var(--c);flex:none}
+.o-o1{--c:var(--o1);color:var(--o1-ink)}.o-o2{--c:var(--o2);color:var(--o2-ink)}
+section{margin-top:40px;padding-top:26px;border-top:1px solid var(--line)}
+.flow{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 16px;overflow-x:auto}
+.flow svg{display:block;width:100%;height:auto;min-width:1000px}
+.flow text{font-family:var(--sans);fill:var(--ink);font-size:12px}
+.flow .t{font-size:14px;font-weight:600}.flow .sub{fill:var(--ink-2)}.flow .tiny{font-size:11px;fill:var(--ink-3)}
+.flow .box{rx:8;stroke-width:1.3}.flow .b-o1{fill:var(--o1-bg);stroke:var(--o1)}.flow .b-o2{fill:var(--o2-bg);stroke:var(--o2)}
+.flow .arrow{fill:none;stroke:var(--line-strong);stroke-width:1.5}
+.tblwrap{overflow-x:auto;margin-top:16px}
+.tbl{width:100%;min-width:640px;border-collapse:collapse;background:var(--surface);font-size:14px}
+.tbl th{text-align:left;font-size:12px;color:var(--ink-3);padding:10px 14px;background:var(--surface-2)}
+.tbl th:first-child{width:20%;min-width:140px}
+.tbl td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2);overflow-wrap:anywhere}
+.tbl tr:last-child td{border-bottom:none}
+.appendix{margin-top:48px;padding-top:26px;border-top:3px solid var(--line)}
+.appendix h2{font-size:20px}.appendix section{margin-top:26px;padding-top:20px}
+.cond{font-family:var(--mono);font-size:13px;line-height:1.5;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow-x:auto;color:var(--ink)}
+@media(max-width:520px){.wrap{padding:24px 16px 40px}.problem{padding:16px}.tbl th,.tbl td{padding:8px}}
+@media print{body{background:white;color:black}.wrap{max-width:none;padding:0}.flow svg{min-width:0}.flow,.tblwrap{overflow:visible}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <p class="eyebrow">Illustrative design / fictional system / settled design</p>
+    <h1>Schema loader ownership</h1>
+    <p class="lead">The payload repository builds the loader; the environment selects and runs it.</p>
+  </header>
+  <div class="problem">
+    <p>The platform repository currently builds the loader image as part of its application release. A schema-only change therefore waits for an application release even though the application code has not changed.</p>
+    <p>This change makes the payload repository build a versioned loader image. The environment repository selects an image digest and runs it before starting the service.</p>
+    <p>The change does not alter schema compatibility rules or retry failed loads automatically. An image build proves that the payload can be packaged, not that a target environment will accept it.</p>
+  </div>
+  <p class="eyebrow legend-label">Colors identify responsible repositories</p>
+  <div class="legend" aria-label="Diagram owners">
+    <span class="owner o-o1">Payload: builds the loader image</span>
+    <span class="owner o-o2">Environment: selects and runs the image</span>
+  </div>
+  <section>
+    <h2>Artifact path</h2>
+    <div class="flow" tabindex="0" role="region" aria-label="Artifact path diagram, scroll horizontally on small screens">
+      <svg viewBox="0 0 1000 160" role="img" aria-labelledby="ownership-title" aria-describedby="ownership-description">
+        <title id="ownership-title">From payload release to environment load</title>
+        <desc id="ownership-description">The payload repository packages schema files and publishes a versioned loader image. The environment repository selects an immutable digest, then runs that image in a load job using environment credentials.</desc>
+        <defs>
+          <marker id="ownership-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--line-strong)"/></marker>
+        </defs>
+        <path d="M288 86 L352 86" class="arrow" marker-end="url(#ownership-arrow)"/>
+        <path d="M620 86 L684 86" class="arrow" marker-end="url(#ownership-arrow)"/>
+        <rect x="24" y="36" width="264" height="100" class="box b-o1"/>
+        <text x="36" y="60" class="t">Payload release</text>
+        <text x="36" y="82" class="sub">Packages schema files</text>
+        <text x="36" y="104" class="sub">Publishes loader image</text>
+        <text x="36" y="124" class="tiny">No environment credentials</text>
+        <rect x="356" y="36" width="264" height="100" class="box b-o2"/>
+        <text x="368" y="60" class="t">Environment configuration</text>
+        <text x="368" y="82" class="sub">Selects immutable digest</text>
+        <text x="368" y="104" class="sub">Pins the deployment input</text>
+        <rect x="688" y="36" width="288" height="100" class="box b-o2"/>
+        <text x="700" y="60" class="t">Environment load job</text>
+        <text x="700" y="82" class="sub">Runs the selected image</text>
+        <text x="700" y="104" class="sub">Uses environment credentials</text>
+      </svg>
+    </div>
+  </section>
+  <section>
+    <h2>Ownership</h2>
+    <div class="tblwrap">
+      <table class="tbl">
+        <thead><tr><th scope="col">Repository</th><th scope="col">Responsibility</th><th scope="col">Change here when</th></tr></thead>
+        <tbody>
+          <tr><td>Payload</td><td>Schema files and loader image</td><td>Schema contents or loader behavior changes</td></tr>
+          <tr><td>Environment</td><td>Image digest and load job</td><td>The selected version or deployment order changes</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The environment selects a digest rather than a mutable tag so a deployment uses the same image when retried. The payload repository does not receive credentials for target environments.</p>
+  </section>
+  <section>
+    <h2>Load behavior</h2>
+    <p>The deployment checks for a configured loader digest. If none is configured, it skips the load step and starts the service. A failed configuration read stops the deployment; it is not treated as an absent digest.</p>
+    <p>When a digest is present, the environment runs the loader before starting the service. A successful job allows startup. A failed job stops startup and retains its logs. There is no automatic retry because a repeated load may not be idempotent.</p>
+  </section>
+  <section>
+    <h2>Compatibility and rollout</h2>
+    <p>The first deployment selects the digest corresponding to the payload already used by the environment. Schema compatibility remains the payload owner's responsibility.</p>
+    <p>Restoring the previous digest changes what the next load uses. It does not undo schema writes already made to the service. Data rollback remains outside this change.</p>
+  </section>
+  <section>
+    <h2>Validation</h2>
+    <p>The validation plan covers four paths: absent digest, unreadable configuration, successful load, and failed load. It also checks that a failed load retains logs and prevents startup.</p>
+    <p>A disposable-environment run will check the deployment order and credential boundary. No environment run has been performed for this illustrative design.</p>
+  </section>
+  <div class="appendix">
+    <h2>Reference detail</h2>
+    <section>
+      <h3>Appendix A: image selection</h3>
+      <p>The environment configuration contains one immutable image reference:</p>
+      <pre class="cond"><code>{
+  "loaderImage": "registry.example.invalid/schema-loader@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}</code></pre>
+    </section>
+    <section>
+      <h3>Appendix B: alternatives</h3>
+      <div class="tblwrap">
+        <table class="tbl">
+          <thead><tr><th scope="col">Alternative</th><th scope="col">Why not</th></tr></thead>
+          <tbody>
+            <tr><td>Keep the application-release build</td><td>Schema changes would still wait for an unrelated release</td></tr>
+            <tr><td>Select a mutable image tag</td><td>A retry could load a different payload</td></tr>
+            <tr><td>Retry every failed load</td><td>The loader does not establish idempotency</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+</body>
+</html>
