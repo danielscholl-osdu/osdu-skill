@@ -11,10 +11,20 @@ A GitHub Copilot plugin with skills for people who run OSDU on Azure.
 ## Install
 
 ```bash
-copilot plugin install danielscholl-osdu/osdu-skill
+copilot plugin marketplace add danielscholl-osdu/osdu-skill
+copilot plugin install osdu@osdu-skill
 ```
 
-Update later with `copilot plugin update osdu`.
+This installs the latest release. Later releases are picked up with:
+
+```bash
+copilot plugin marketplace update osdu-skill
+copilot plugin update osdu@osdu-skill
+```
+
+In an interactive session, `/plugin` shows when a newer release is available and offers to update. Copilot can also update plugins from this marketplace automatically at the start of a session: turn on auto-update for the `osdu-skill` marketplace in your Copilot settings.
+
+To try unreleased work from `main` instead, install the repository directly with `copilot plugin install danielscholl-osdu/osdu-skill`.
 
 ## Requirements
 

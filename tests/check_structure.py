@@ -15,6 +15,15 @@ for field in ("description", "version"):
     if not manifest.get(field):
         errors.append(f"plugin.json: missing {field}")
 
+market = json.loads((ROOT / ".github/plugin/marketplace.json").read_text())
+entry = market["plugins"][0]
+if entry["name"] != manifest["name"]:
+    errors.append("marketplace.json: plugin name must match plugin.json")
+if not (entry["version"] == market["metadata"]["version"] == manifest["version"]):
+    errors.append("marketplace.json and plugin.json versions must match")
+if entry["source"]["ref"] not in ("main", manifest["version"]):
+    errors.append("marketplace.json: ref must be the released version tag")
+
 skills = sorted(path.parent for path in (ROOT / manifest.get("skills", "skills/")).glob("*/SKILL.md"))
 if not skills:
     errors.append("no skills found")

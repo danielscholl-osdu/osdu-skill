@@ -1,0 +1,68 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-v-in-tag": false,
+  "include-component-in-tag": false,
+  "bump-minor-pre-major": true,
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "package-name": "osdu-skill",
+      "changelog-sections": [
+        {
+          "type": "feat",
+          "section": "Features"
+        },
+        {
+          "type": "fix",
+          "section": "Fixes"
+        },
+        {
+          "type": "docs",
+          "section": "Skill text and documentation"
+        },
+        {
+          "type": "perf",
+          "section": "Performance"
+        },
+        {
+          "type": "chore",
+          "hidden": true
+        },
+        {
+          "type": "test",
+          "hidden": true
+        },
+        {
+          "type": "ci",
+          "hidden": true
+        },
+        {
+          "type": "refactor",
+          "hidden": true
+        }
+      ],
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": ".github/plugin/marketplace.json",
+          "jsonpath": "$.metadata.version"
+        },
+        {
+          "type": "json",
+          "path": ".github/plugin/marketplace.json",
+          "jsonpath": "$.plugins[0].version"
+        },
+        {
+          "type": "json",
+          "path": ".github/plugin/marketplace.json",
+          "jsonpath": "$.plugins[0].source.ref"
+        }
+      ]
+    }
+  }
+}

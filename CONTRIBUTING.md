@@ -42,3 +42,28 @@ Copilot reads the `description` to decide whether to load the skill, and the bod
 ## Pull requests
 
 Keep each pull request to one skill or one concern. Say what changed in behaviour and how you verified it.
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org), because the release notes and the next version number are built from them:
+
+| Prefix | Use for | Effect on the next release |
+|---|---|---|
+| `feat:` | A new skill, command, or capability | Minor version |
+| `fix:` | A behaviour that was wrong | Patch version |
+| `docs:` | Skill text, references, README | Listed in the notes, no bump on its own |
+| `chore:`, `test:`, `ci:`, `refactor:` | Everything else | Not listed |
+
+A breaking change adds `!` after the type (`feat!:`), and says what breaks in the body.
+
+## Releasing
+
+`main` is where work lands. People who installed the plugin from the marketplace do not get `main`; they get the last release, because the marketplace entry is pinned to a release tag.
+
+1. Every push to `main` opens or updates one pull request titled "chore(main): release X.Y.Z". It holds the changelog and the version bump for everything merged since the last release.
+2. To release, review that pull request and merge it. That is the only step, and nothing reaches users until it happens.
+3. Merging creates the tag and the GitHub release, and moves the marketplace entry to the new tag.
+
+The release pull request changes `CHANGELOG.md`, the version in `plugin.json`, and the version and `ref` in `.github/plugin/marketplace.json`. Do not edit those by hand.
+
+The release pull request does not run CI, because GitHub does not start workflows for pull requests opened by its own token. It only changes version strings and the changelog; the code it releases was tested when it was pushed to `main`.
+
+To hold a change back from a release, keep it off `main`. To release a specific version number, add `Release-As: X.Y.Z` to the body of a commit on `main`.
