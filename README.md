@@ -10,12 +10,31 @@ A GitHub Copilot plugin with skills for people who run OSDU on Azure.
 
 ## Install
 
+### GitHub Copilot app
+
+1. Add the marketplace once. In a terminal:
+
+   ```bash
+   copilot plugin marketplace add danielscholl-osdu/osdu-skill
+   ```
+
+   The app and the CLI share marketplaces, so `osdu-skill` then appears under **Available** on the app's **Plugins** tab.
+
+2. In the app, open **Customize**, go to the **Plugins** tab, and select **Install**.
+3. Enter `osdu@osdu-skill` and select **Install**. The name is the plugin (`osdu`) followed by the marketplace (`osdu-skill`); the dialog does not accept the repository path.
+
+`osdu` now appears under **Installed** with its version. Select it to see the three skills it provides, each with its own switch.
+
+To move to a newer release, select the plugin and then **Update plugin**, or use **Update all** on the **Plugins** tab.
+
+### Copilot CLI
+
 ```bash
 copilot plugin marketplace add danielscholl-osdu/osdu-skill
 copilot plugin install osdu@osdu-skill
 ```
 
-This installs the latest release. Later releases are picked up with:
+Later releases are picked up with:
 
 ```bash
 copilot plugin marketplace update osdu-skill
@@ -46,7 +65,7 @@ export ENTRA_PROTECTED_GROUPS="Subscription Owners,Platform Admins"
 
 ## Using it
 
-Ask Copilot in plain language:
+Ask Copilot in plain language, in the app or the CLI:
 
 - "What can I do in this tenant?"
 - "Add alex@partner.com and sam@partner.com to my tenant, put them in a new group called Webinar, and write instructions I can send them on how to get in."
