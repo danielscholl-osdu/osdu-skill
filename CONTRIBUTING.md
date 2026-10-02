@@ -56,14 +56,14 @@ A breaking change adds `!` after the type (`feat!:`), and says what breaks in th
 
 ## Releasing
 
-`main` is where work lands. People who installed the plugin from the marketplace do not get `main`; they get the last release, because the marketplace entry is pinned to a release tag.
+`main` is where work lands. People who installed the plugin from the marketplace do not get `main`; they get the last release, because the marketplace entry installs from the `release` branch and only the release workflow moves that branch.
 
 1. Every push to `main` opens or updates one pull request titled "chore(main): release X.Y.Z". It holds the changelog and the version bump for everything merged since the last release.
 2. To release, review that pull request and merge it. That is the only step, and nothing reaches users until it happens.
-3. Merging creates the tag and the GitHub release, and moves the marketplace entry to the new tag.
+3. Merging creates the tag `vX.Y.Z` and the GitHub release, and moves the `release` branch to that tag.
 
-The release pull request changes `CHANGELOG.md`, the version in `plugin.json`, and the version and `ref` in `.github/plugin/marketplace.json`. Do not edit those by hand.
+The release pull request changes `CHANGELOG.md` and the version in `plugin.json` and `.github/plugin/marketplace.json`. Do not edit those by hand, and do not push to the `release` branch.
 
-The release pull request does not run CI, because GitHub does not start workflows for pull requests opened by its own token. It only changes version strings and the changelog; the code it releases was tested when it was pushed to `main`.
+CI on the release pull request waits for a maintainer, because the pull request is opened by a workflow. Select "Approve and run" on it before merging.
 
 To hold a change back from a release, keep it off `main`. To release a specific version number, add `Release-As: X.Y.Z` to the body of a commit on `main`.

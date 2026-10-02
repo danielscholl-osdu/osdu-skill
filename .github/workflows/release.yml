@@ -13,6 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # The marketplace entry installs from the release branch, so moving it is what ships a release.
+      - uses: actions/checkout@v4
+        if: steps.release.outputs.release_created
+        with:
+          ref: ${{ steps.release.outputs.tag_name }}
+      - name: Move the release branch to the new tag
+        if: steps.release.outputs.release_created
+        run: git push --force origin HEAD:refs/heads/release

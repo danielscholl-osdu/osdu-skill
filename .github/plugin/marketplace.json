@@ -15,7 +15,7 @@
       "source": {
         "source": "github",
         "repo": "danielscholl-osdu/osdu-skill",
-        "ref": "main"
+        "ref": "release"
       }
     }
   ]
