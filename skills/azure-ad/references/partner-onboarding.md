@@ -2,7 +2,7 @@
 
 The usual request: several people from another company need to sign in to the tenant and work in one resource group. Tracking them through a dedicated security group means access is granted and later removed in one place.
 
-The Entra steps use `scripts/entra.py`. The Azure steps use the Azure CLI and need rights on the subscription, which are separate from directory roles.
+Every step uses `scripts/entra.py`. The Azure steps need rights on the subscription, which are separate from directory roles.
 
 ## 1. Confirm what is being asked
 
@@ -34,25 +34,23 @@ The group has to exist before `invite` can plan against it, so apply `group crea
 
 ## 4. Create the resource group and grant the group access
 
-These commands change Azure resources, so show them and get approval before running them, the same as a plan.
-
 ```bash
-az group create --subscription SUBSCRIPTION --name RG_NAME --location REGION
-az role assignment create --assignee-object-id GROUP_ID --assignee-principal-type Group \
-  --role "Contributor" --scope /subscriptions/SUBSCRIPTION_ID/resourceGroups/RG_NAME
+python3 scripts/entra.py azure subscriptions --tenant TENANT_ID
+python3 scripts/entra.py azure grant --tenant TENANT_ID --subscription SUBSCRIPTION \
+  --resource-group RG_NAME --location REGION --group "GROUP_NAME" --role Contributor
 ```
 
-`GROUP_ID` is the `group_id` in the `group create` result, whether the group was created or already existed. Creating a resource group needs Contributor on the subscription. Assigning a role needs Owner, User Access Administrator, or Role Based Access Control Administrator at that scope.
+Plan, show the plan, and apply after approval. Creating a resource group needs Contributor on the subscription. Assigning a role needs Owner, User Access Administrator, or Role Based Access Control Administrator at that scope.
 
 ## 5. Verify and hand over
 
 ```bash
 python3 scripts/entra.py group show "GROUP_NAME" --tenant TENANT_ID
-az role assignment list --assignee GROUP_ID --all -o table
+python3 scripts/entra.py azure access --group "GROUP_NAME" --tenant TENANT_ID
 ```
 
-Tell the requester what the guests should expect: an invitation email from Microsoft to accept, after which they sign in at the Azure portal and switch to this tenant.
+Tell the requester what the guests should expect: an invitation email from Microsoft to accept, after which they sign in at the Azure portal and switch to this tenant. [engagements.md](engagements.md) has the full instructions to send.
 
 ## Removing access later
 
-Removing the role assignment ends the Azure access for everyone at once. Deleting the group, and optionally the guest accounts with it, is covered in [engagements.md](engagements.md). Remove the role assignment before deleting the group, or it is left behind pointing at nothing.
+`azure revoke` ends the Azure access for everyone at once. Deleting the group, and optionally the guest accounts with it, is covered in [engagements.md](engagements.md). Revoke before deleting the group, or the role assignment is left behind pointing at nothing.

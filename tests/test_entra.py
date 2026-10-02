@@ -110,9 +110,122 @@ class FakeGraph:
         return [call for call in self.calls if call[0] != "GET"]
 
 
-def session(fake, explicit=True, protected=(), claims=None):
+SUB = "99999999-9999-9999-9999-999999999999"
+SCOPE = f"/subscriptions/{SUB}/resourceGroups/demo-rg"
+ROLE = f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleDefinitions/role-contributor"
+
+
+class FakeArm:
+    """Canned Azure Resource Manager responses, recording every call."""
+
+    def __init__(self):
+        self.calls = []
+        self.resource_groups = {"demo-rg": {"location": "eastus"}}
+        self.assignments = []
+
+    def transport(self, method, url, headers, body):
+        path = url[len(entra.ARM):].split("?")[0]
+        self.calls.append((method, path))
+        ok = FakeGraph.ok
+        if method == "GET" and path == "/subscriptions":
+            return ok({"value": [{"subscriptionId": SUB, "displayName": "Demo", "state": "Enabled", "tenantId": TENANT},
+                                 {"subscriptionId": "other", "displayName": "Elsewhere", "tenantId": "another-tenant"}]})
+        if method == "GET" and "/resourcegroups/" in path:
+            name = path.rsplit("/", 1)[1]
+            return ok(self.resource_groups[name]) if name in self.resource_groups else FakeGraph.error(404, "not found")
+        if method == "GET" and path.endswith("/roleDefinitions"):
+            return ok({"value": [{"id": ROLE, "properties": {"roleName": "Contributor"}}]})
+        if method == "GET" and path == ROLE:
+            return ok({"id": ROLE, "properties": {"roleName": "Contributor"}})
+        if method == "GET" and path.endswith("/roleAssignments"):
+            return ok({"value": self.assignments})
+        if method in ("PUT", "DELETE"):
+            return ok({}, 201)
+        raise AssertionError(f"Unexpected ARM call: {method} {path}")
+
+    def writes(self):
+        return [call for call in self.calls if call[0] != "GET"]
+
+
+def session(fake, explicit=True, protected=(), claims=None, arm=None):
     graph = entra.Graph("token", transport=fake.transport, sleep=lambda seconds: None)
-    return entra.Session(graph, TENANT, explicit, claims if claims is not None else {"scp": "x"}, protected)
+    source = (lambda: entra.Graph("arm", transport=arm.transport, base=entra.ARM)) if arm else None
+    return entra.Session(graph, TENANT, explicit, claims if claims is not None else {"scp": "x"}, protected, source)
+
+
+def grant_args(**overrides):
+    values = {"subscription": "Demo", "resource_group": "demo-rg", "group": "Team", "role": "Contributor",
+              "location": None, "apply": False, "allow_protected": False}
+    return SimpleNamespace(**{**values, **overrides})
+
+
+class AzureTests(unittest.TestCase):
+    def test_subscriptions_are_limited_to_the_tenant(self):
+        result = entra.cmd_azure_subscriptions(session(FakeGraph(), arm=FakeArm()), SimpleNamespace())
+        self.assertEqual([sub["name"] for sub in result["subscriptions"]], ["Demo"])
+
+    def test_grant_plan_changes_nothing(self):
+        arm = FakeArm()
+        result = entra.cmd_azure_grant(session(FakeGraph(), arm=arm), grant_args())
+        self.assertEqual(result["resource_group"]["status"], "existing")
+        self.assertEqual(result["assignment"]["status"], "planned")
+        self.assertEqual(result["scope"], SCOPE)
+        self.assertEqual(arm.writes(), [])
+
+    def test_grant_apply_creates_the_resource_group_then_the_assignment(self):
+        arm = FakeArm()
+        result = entra.cmd_azure_grant(session(FakeGraph(), arm=arm),
+                                       grant_args(resource_group="new-rg", location="westus", apply=True))
+        self.assertEqual(result["resource_group"]["status"], "created")
+        self.assertEqual(result["assignment"]["status"], "created")
+        self.assertEqual([call[0] for call in arm.writes()], ["PUT", "PUT"])
+        self.assertTrue(arm.writes()[0][1].endswith("/resourcegroups/new-rg"))
+        self.assertIn("/resourceGroups/new-rg/providers/Microsoft.Authorization/roleAssignments/", arm.writes()[1][1])
+
+    def test_grant_is_idempotent_when_the_group_already_holds_the_role(self):
+        arm = FakeArm()
+        arm.assignments = [{"id": SCOPE + "/a1", "properties": {"roleDefinitionId": ROLE, "scope": SCOPE}}]
+        result = entra.cmd_azure_grant(session(FakeGraph(), arm=arm), grant_args(apply=True))
+        self.assertEqual(result["assignment"]["status"], "existing")
+        self.assertEqual(arm.writes(), [])
+
+    def test_new_resource_group_needs_a_location(self):
+        with self.assertRaises(entra.EntraError) as caught:
+            entra.cmd_azure_grant(session(FakeGraph(), arm=FakeArm()), grant_args(resource_group="new-rg"))
+        self.assertEqual(caught.exception.code, "location_required")
+
+    def test_role_that_can_grant_access_needs_allow_flag(self):
+        with self.assertRaises(entra.EntraError) as caught:
+            entra.cmd_azure_grant(session(FakeGraph(), arm=FakeArm()), grant_args(role="Owner"))
+        self.assertEqual(caught.exception.code, "privileged_role")
+
+    def test_unknown_subscription_is_reported(self):
+        with self.assertRaises(entra.EntraError) as caught:
+            entra.cmd_azure_grant(session(FakeGraph(), arm=FakeArm()), grant_args(subscription="Nope"))
+        self.assertEqual(caught.exception.code, "subscription_not_found")
+
+    def test_revoke_removes_only_assignments_made_at_the_resource_group(self):
+        arm = FakeArm()
+        arm.assignments = [{"id": SCOPE + "/a1", "properties": {"roleDefinitionId": ROLE, "scope": SCOPE}},
+                           {"id": "/inherited", "properties": {"roleDefinitionId": ROLE, "scope": f"/subscriptions/{SUB}"}}]
+        result = entra.cmd_azure_revoke(session(FakeGraph(), arm=arm), grant_args(apply=True))
+        self.assertEqual(result["assignments"], [{"role": "Contributor", "status": "removed"}])
+        self.assertEqual(arm.writes(), [("DELETE", SCOPE + "/a1")])
+
+    def test_group_delete_plan_lists_azure_access(self):
+        arm = FakeArm()
+        arm.assignments = [{"id": SCOPE + "/a1", "properties": {"roleDefinitionId": ROLE, "scope": SCOPE}}]
+        result = entra.cmd_group_delete(session(FakeGraph(), arm=arm), delete_args())
+        self.assertEqual(result["azure_access"], [{"subscription": "Demo", "role": "Contributor", "scope": SCOPE}])
+
+    def test_group_delete_says_when_azure_access_was_not_checked(self):
+        result = entra.cmd_group_delete(session(FakeGraph()), delete_args())
+        self.assertEqual(result["azure_access"], "not checked (auth_failed)")
+
+    def test_arm_token_is_not_sent_to_graph(self):
+        client = entra.Graph("arm", transport=FakeArm().transport, base=entra.ARM)
+        with self.assertRaises(entra.EntraError):
+            client.request("GET", entra.GRAPH + "/users")
 
 
 def invite_args(**overrides):

@@ -52,6 +52,22 @@ Deletes accounts from the tenant. The plan lists each account with its groups an
 
 A deleted account can be restored for 30 days from the Entra admin center.
 
+### `azure subscriptions [--tenant ID]`
+
+The subscriptions in the tenant, with ID and state, read live from Azure for the signed-in tenant.
+
+### `azure grant --subscription S --resource-group RG --group G [--role NAME] [--location REGION] [--apply]`
+
+Assigns the group a role on the resource group. `--subscription` takes a name or an ID. `--role` defaults to Contributor. A resource group that does not exist is created, which requires `--location`. A role the group already holds there is reported as `existing` and nothing is changed. A role that can grant access to others needs `--allow-protected`.
+
+### `azure revoke --subscription S --resource-group RG --group G [--apply]`
+
+Removes every role assigned to the group directly on that resource group. Roles the group inherits from the subscription or above are not touched, and neither is the resource group.
+
+### `azure access --group G [--tenant ID]`
+
+Every Azure role the group holds across the tenant's subscriptions, with its scope. It queries each subscription, so it takes several seconds.
+
 ### `invite --email E... [--groups G...] [--like EMAIL] [--apply]`
 
 | Option | Meaning |
@@ -76,6 +92,8 @@ Every command prints one JSON object and exits 0 on success, 1 on failure.
 | `tenant` | Tenant ID the command ran against. |
 | `applied` | `false` for a plan, `true` after `--apply`. |
 | `tenant_info` | On `invite`: the tenant's `name` and `default_domain`, for writing access instructions. |
+| `resource_group.status`, `assignment.status` | On `azure grant`: `existing`, `planned`, or `created`. |
+| `azure_access` | On `group delete`: the Azure roles the group holds, which deleting it would orphan. `not checked (...)` when Azure could not be read. |
 | `confirm` | On a `group delete` or `offboard` plan: the code `--apply` requires. It changes when the list of what would be deleted changes. |
 | `members[].status`, `users[].status` | On deletes: `planned`, `deleted`, `kept` (with `reason`), `refused`, `not_found`, or `failed`. |
 | `users[].invitation.status` | `planned`, `invited`, or `existing`. |
@@ -88,7 +106,7 @@ A plan reads the directory but changes nothing. It does not prove the later `--a
 
 ## Read-only Azure CLI queries
 
-For questions the script does not cover, the Azure CLI reads the same directory. Confirm the tenant first, since `az` uses its own current session.
+For questions the script does not cover, the Azure CLI reads the same directory. Confirm the tenant first, since `az` uses its own current session. Leave `--refresh` off `az account list`: it signs in again to every tenant the account belongs to and can stall on a browser prompt for an unrelated one.
 
 ```bash
 az account show --query tenantId -o tsv
