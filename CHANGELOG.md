@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/danielscholl-osdu/osdu-skill/compare/v0.1.0...v0.1.1) (2026-10-02)
+
+
+### Skill text and documentation
+
+* lead the install instructions with the Copilot app ([#4](https://github.com/danielscholl-osdu/osdu-skill/issues/4)) ([8d8f8a1](https://github.com/danielscholl-osdu/osdu-skill/commit/8d8f8a1a1010d59995099976e12f871aaebaba1d))
+
 ## 0.1.0 (2026-10-02)
 
 
