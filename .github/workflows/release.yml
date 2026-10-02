@@ -1,8 +1,16 @@
 name: Release
 
+# Only what ships in the plugin starts a release. The last three paths are the files a merged
+# release pull request changes, so merging one still runs this workflow and publishes it.
 on:
   push:
     branches: [main]
+    paths:
+      - "skills/**"
+      - "plugin.json"
+      - ".github/plugin/**"
+      - "CHANGELOG.md"
+      - ".release-please-manifest.json"
 
 permissions:
   contents: write
