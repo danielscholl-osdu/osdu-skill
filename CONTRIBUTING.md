@@ -41,6 +41,8 @@ Copilot reads the `description` to decide whether to load the skill, and the bod
 
 ## Pull requests
 
+Every change reaches `main` through a pull request, and the six CI jobs (Linux, macOS, and Windows on Python 3.10 and 3.13) have to pass before it can merge. No review approval is required.
+
 Keep each pull request to one skill or one concern. Say what changed in behaviour and how you verified it.
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org), because the release notes and the next version number are built from them:
@@ -64,7 +66,7 @@ A breaking change adds `!` after the type (`feat!:`), and says what breaks in th
 
 The release pull request changes `CHANGELOG.md` and the version in `plugin.json` and `.github/plugin/marketplace.json`. Do not edit those by hand, and do not push to the `release` branch.
 
-`main` and `release` are protected against deletion and force pushes. The release workflow only ever moves `release` forward.
+`main` and `release` are protected against deletion and force pushes. The release workflow only ever moves `release` forward, and it is the only thing that pushes to that branch.
 
 CI on the release pull request waits for a maintainer, because the pull request is opened by a workflow. Select "Approve and run" on it before merging.
 
