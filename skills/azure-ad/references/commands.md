@@ -36,6 +36,22 @@ Creates a security group with assigned membership. The owner defaults to the sig
 
 Adds users who are already in the tenant to one or more groups. Use `invite` for people who are not in the tenant yet.
 
+### `group remove --group G... --email E... [--apply]`
+
+Removes users from groups. Someone who is not a member is reported as `not_member`. The accounts stay in the tenant.
+
+### `group delete --name NAME [--delete-guests] [--apply --confirm CODE]`
+
+Deletes a security group. The plan lists every member and returns a `confirm` code. With `--delete-guests`, guest members who are in no other group and hold no directory role are deleted too; everyone else is listed as `kept` with the reason. If an account cannot be deleted, the group is kept.
+
+Deleting a security group is permanent. A protected group needs `--allow-protected`.
+
+### `offboard --email E... [--allow-internal] [--apply --confirm CODE]`
+
+Deletes accounts from the tenant. The plan lists each account with its groups and returns a `confirm` code. The signed-in account and anyone holding a directory role are refused. An account that is not a guest is refused unless `--allow-internal` is given. Someone who is not in the tenant is reported as `not_found`, which is not an error.
+
+A deleted account can be restored for 30 days from the Entra admin center.
+
 ### `invite --email E... [--groups G...] [--like EMAIL] [--apply]`
 
 | Option | Meaning |
@@ -59,8 +75,11 @@ Every command prints one JSON object and exits 0 on success, 1 on failure.
 | `success` | `false` if any user or group step failed. |
 | `tenant` | Tenant ID the command ran against. |
 | `applied` | `false` for a plan, `true` after `--apply`. |
+| `tenant_info` | On `invite`: the tenant's `name` and `default_domain`, for writing access instructions. |
+| `confirm` | On a `group delete` or `offboard` plan: the code `--apply` requires. It changes when the list of what would be deleted changes. |
+| `members[].status`, `users[].status` | On deletes: `planned`, `deleted`, `kept` (with `reason`), `refused`, `not_found`, or `failed`. |
 | `users[].invitation.status` | `planned`, `invited`, or `existing`. |
-| `users[].groups[].status` | `planned`, `added`, `already_member`, or `failed`. |
+| `users[].groups[].status` | `planned`, `added`, `already_member`, `removed`, `not_member`, or `failed`. |
 | `users[].groups[].source` | `requested`, or `copied from EMAIL` for `--like`. |
 | `skipped_groups[]` | Groups `--like` left out, with the reason. |
 | `error`, `message` | Present on a failed command, user, or group step. |

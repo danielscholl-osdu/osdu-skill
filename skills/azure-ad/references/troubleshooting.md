@@ -16,6 +16,10 @@ Start with `check`. It shows which tenant and identity are in use and what that 
 | `ambiguous_group`, `ambiguous_user` | More than one match. | Use the object ID. Do not pick one of the matches. |
 | `user_not_found` | The person is not in the tenant. | Use `invite` for a new guest. |
 | `protected_group` | The group is role-assignable or listed as protected. | Confirm the person intends it, then add `--allow-protected`. |
+| `confirmation_required` | A delete was applied without the code from its plan. | Plan, show the plan, and pass its `confirm` code once the person approves. |
+| `plan_changed` | The code does not match what would be deleted now. | The directory changed, or the code is from another plan. Plan again and show the new plan before applying. |
+| `refused` | The account is the signed-in account, holds a directory role, or is not a guest. | Report it as kept, with the reason. An administrator can remove a role first if deletion is really intended. |
+| `partial` | Some accounts could not be deleted, so the group was kept. | Read each member's `message`, fix the cause (usually a missing role), and plan again. |
 | `unsupported_group` | The group has dynamic membership. | Membership follows the group's rule and cannot be set directly. |
 | `invalid_email`, `invalid_redirect` | An email address or the redirect URL is malformed. | Correct the value; the redirect URL has to be HTTPS. |
 | `invalid_response` | Microsoft Graph returned something unexpected. | Stop and report it. Do not continue to the write on a guess. |

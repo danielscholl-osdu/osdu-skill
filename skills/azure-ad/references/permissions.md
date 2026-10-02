@@ -8,6 +8,9 @@ For a person signed in through the Azure CLI, two things decide what works: the 
 | Invite a guest | The tenant's guest invite setting allows it. With the common "admins and guest inviters" setting, the person needs Guest Inviter, User Administrator, Directory Writers, or Global Administrator. |
 | Create a security group | The person holds Groups Administrator, User Administrator, Directory Writers, or Global Administrator, or the tenant lets members create security groups. |
 | Add a member to a group | The person owns the group, or holds one of the group-creating roles above. |
+| Remove a member from a group | Same as adding one. |
+| Delete a group | The person owns the group, or holds Groups Administrator, User Administrator, or Global Administrator. |
+| Delete a guest account | The person holds User Administrator or Global Administrator. Guest Inviter and Groups Administrator cannot, even for guests they invited. |
 | Add a member to a role-assignable group | The person owns the group or holds Privileged Role Administrator or Global Administrator. Other roles cannot. |
 | Add a member to a dynamic group | Not possible. Membership follows the group's rule. |
 
@@ -17,6 +20,7 @@ These are decisions for a tenant administrator, not steps this skill performs.
 
 - **Invitations only:** the Guest Inviter role. It allows inviting and nothing else.
 - **Groups as well:** the Groups Administrator role. Its holder can change the membership of every group that is not role-assignable, including groups that hold powerful Azure roles, so it is a wider grant than the name suggests.
+- **Removing guests afterwards:** the User Administrator role. Without it, a person can delete the engagement's group they own but has to ask an administrator to delete the guest accounts.
 - **One group only:** make the person an owner of that group. No directory role is needed.
 - **Roles through a group:** assigning a directory role to a group requires Microsoft Entra ID P1. Without that licence, roles are assigned to each person directly.
 

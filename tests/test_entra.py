@@ -20,6 +20,8 @@ G_TEAM = "cccccccc-cccc-cccc-cccc-cccccccccccc"
 G_ROLE = "dddddddd-dddd-dddd-dddd-dddddddddddd"
 G_DYN = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
 G_ADMIN = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+GINA = "10000000-0000-0000-0000-000000000001"
+GARY = "10000000-0000-0000-0000-000000000002"
 
 GROUPS = {
     "Team": {"id": G_TEAM, "displayName": "Team", "securityEnabled": True, "groupTypes": []},
@@ -41,7 +43,15 @@ class FakeGraph:
         self.calls = []
         self.users = {"alice@example.com": {"id": ALICE, "displayName": "Alice", "mail": "alice@example.com",
                                             "userType": "Member", "externalUserState": "Accepted"}}
-        self.memberships = {ALICE: ["Team", "RoleHolders", "Dynamic", "Admins"]}
+        self.users["gina@partner.com"] = {"id": GINA, "displayName": "Gina", "mail": "gina@partner.com",
+                                          "userType": "Guest", "@odata.type": "#microsoft.graph.user"}
+        self.users["gary@partner.com"] = {"id": GARY, "displayName": "Gary", "mail": "gary@partner.com",
+                                          "userType": "Guest", "@odata.type": "#microsoft.graph.user"}
+        self.memberships = {ALICE: ["Team", "RoleHolders", "Dynamic", "Admins"], GINA: ["Team"],
+                            GARY: ["Team", "Admins"]}
+        self.roles = {}
+        self.group_members = {G_TEAM: [GINA, GARY, ALICE]}
+        self.delete_failures = {}
         self.member_failures = []
         self.routes = []
 
@@ -54,6 +64,23 @@ class FakeGraph:
         if method == "GET" and path.startswith("/users?"):
             match = [user for email, user in self.users.items() if email.replace("@", "%40") in path]
             return self.ok({"value": match})
+        by_id = {user["id"]: user for user in self.users.values()}
+        if method == "GET" and path.startswith("/organization"):
+            return self.ok({"value": [{"displayName": "contoso", "verifiedDomains": [
+                {"name": "contoso.example", "isDefault": True}]}]})
+        if method == "GET" and "/transitiveMemberOf/" in path and path.startswith("/users/"):
+            return self.ok({"value": self.roles.get(path.split("/")[2], [])})
+        if method == "GET" and re.match(r"/groups/[0-9a-f-]+/members\?", path):
+            return self.ok({"value": [{"@odata.type": "#microsoft.graph.user", **by_id[i]}
+                                      for i in self.group_members.get(path.split("/")[2], [])]})
+        if method == "GET" and re.match(r"/users/[0-9a-f-]{36}\?", path):
+            user = by_id.get(path.split("/")[2].split("?")[0])
+            return self.ok(user) if user else self.error(404, "not found")
+        if method == "DELETE":
+            target = path.split("/")[2]
+            if target in self.delete_failures:
+                return self.delete_failures[target]
+            return 204, {}, b""
         if method == "GET" and "/memberOf/" in path:
             user_id = path.split("/")[2]
             return self.ok({"value": [GROUPS[name] for name in self.memberships.get(user_id, [])]})
@@ -241,11 +268,129 @@ class GroupCommandTests(unittest.TestCase):
         self.assertEqual(fake.writes(), [])
 
 
+def offboard_args(**overrides):
+    values = {"email": ["gina@partner.com"], "apply": False, "confirm": None, "allow_internal": False,
+              "allow_protected": False}
+    return SimpleNamespace(**{**values, **overrides})
+
+
+def delete_args(**overrides):
+    values = {"name": "Team", "delete_guests": False, "apply": False, "confirm": None, "allow_protected": False}
+    return SimpleNamespace(**{**values, **overrides})
+
+
+class OffboardTests(unittest.TestCase):
+    def test_plan_returns_a_code_and_deletes_nothing(self):
+        fake = FakeGraph()
+        result = entra.cmd_offboard(session(fake), offboard_args())
+        self.assertEqual(result["users"][0]["status"], "planned")
+        self.assertEqual(result["users"][0]["groups"], ["Team"])
+        self.assertEqual(len(result["confirm"]), 8)
+        self.assertEqual(fake.writes(), [])
+
+    def test_apply_without_the_code_is_refused_and_does_not_reveal_it(self):
+        fake = FakeGraph()
+        code = entra.cmd_offboard(session(fake), offboard_args())["confirm"]
+        with self.assertRaises(entra.EntraError) as caught:
+            entra.cmd_offboard(session(fake), offboard_args(apply=True))
+        self.assertEqual(caught.exception.code, "confirmation_required")
+        self.assertNotIn(code, str(caught.exception))
+        self.assertEqual(fake.writes(), [])
+
+    def test_code_from_a_different_plan_is_rejected(self):
+        fake = FakeGraph()
+        code = entra.cmd_offboard(session(fake), offboard_args())["confirm"]
+        with self.assertRaises(entra.EntraError) as caught:
+            entra.cmd_offboard(session(fake), offboard_args(email=["gary@partner.com"], apply=True, confirm=code))
+        self.assertEqual(caught.exception.code, "plan_changed")
+        self.assertEqual(fake.writes(), [])
+
+    def test_apply_with_the_code_deletes_the_account(self):
+        fake = FakeGraph()
+        code = entra.cmd_offboard(session(fake), offboard_args())["confirm"]
+        result = entra.cmd_offboard(session(fake), offboard_args(apply=True, confirm=code))
+        self.assertTrue(result["success"])
+        self.assertEqual(result["users"][0]["status"], "deleted")
+        self.assertEqual(fake.writes(), [("DELETE", f"{entra.GRAPH}/users/{GINA}")])
+
+    def test_refuses_self_internal_accounts_and_role_holders(self):
+        fake = FakeGraph()
+        fake.users["ivan@example.com"] = {"id": NEW, "displayName": "Ivan", "mail": "ivan@example.com", "userType": "Member"}
+        fake.roles[GARY] = [{"displayName": "Guest Inviter"}]
+        result = entra.cmd_offboard(session(fake), offboard_args(
+            email=["alice@example.com,ivan@example.com,gary@partner.com"]))
+        reasons = [user["message"] for user in result["users"]]
+        self.assertIn("signed-in account", reasons[0])
+        self.assertIn("internal account", reasons[1])
+        self.assertIn("directory role", reasons[2])
+        self.assertIsNone(result["confirm"])
+        self.assertFalse(result["success"])
+
+    def test_someone_already_gone_is_not_an_error(self):
+        result = entra.cmd_offboard(session(FakeGraph()), offboard_args(email=["ghost@partner.com"]))
+        self.assertEqual(result["users"][0]["status"], "not_found")
+        self.assertTrue(result["success"])
+
+
+class GroupDeleteTests(unittest.TestCase):
+    def test_plan_keeps_accounts_unless_asked(self):
+        fake = FakeGraph()
+        result = entra.cmd_group_delete(session(fake), delete_args())
+        self.assertEqual(result["status"], "planned")
+        self.assertEqual({member["status"] for member in result["members"]}, {"kept"})
+        self.assertEqual(fake.writes(), [])
+
+    def test_delete_guests_takes_only_guests_with_no_other_access(self):
+        fake = FakeGraph()
+        result = entra.cmd_group_delete(session(fake), delete_args(delete_guests=True))
+        by_name = {member["name"]: member for member in result["members"]}
+        self.assertEqual(by_name["Gina"]["status"], "planned")
+        self.assertIn("also a member of: Admins", by_name["Gary"]["reason"])
+        self.assertIn("signed-in account", by_name["Alice"]["reason"])
+
+    def test_apply_deletes_accounts_then_the_group(self):
+        fake = FakeGraph()
+        code = entra.cmd_group_delete(session(fake), delete_args(delete_guests=True))["confirm"]
+        result = entra.cmd_group_delete(session(fake), delete_args(delete_guests=True, apply=True, confirm=code))
+        self.assertEqual(result["status"], "deleted")
+        self.assertEqual(fake.writes(), [("DELETE", f"{entra.GRAPH}/users/{GINA}"),
+                                         ("DELETE", f"{entra.GRAPH}/groups/{G_TEAM}")])
+
+    def test_group_is_kept_when_an_account_cannot_be_deleted(self):
+        fake = FakeGraph()
+        fake.delete_failures[GINA] = fake.error(403, "Insufficient privileges")
+        code = entra.cmd_group_delete(session(fake), delete_args(delete_guests=True))["confirm"]
+        result = entra.cmd_group_delete(session(fake), delete_args(delete_guests=True, apply=True, confirm=code))
+        self.assertFalse(result["success"])
+        self.assertEqual(result["status"], "kept")
+        self.assertEqual(len(fake.writes()), 1)
+
+    def test_membership_change_after_the_plan_invalidates_the_code(self):
+        fake = FakeGraph()
+        code = entra.cmd_group_delete(session(fake), delete_args(delete_guests=True))["confirm"]
+        fake.group_members[G_TEAM] = [GINA]
+        with self.assertRaises(entra.EntraError) as caught:
+            entra.cmd_group_delete(session(fake), delete_args(delete_guests=True, apply=True, confirm=code))
+        self.assertEqual(caught.exception.code, "plan_changed")
+        self.assertEqual(fake.writes(), [])
+
+    def test_protected_group_needs_allow_flag(self):
+        with self.assertRaises(entra.EntraError) as caught:
+            entra.cmd_group_delete(session(FakeGraph()), delete_args(name="RoleHolders"))
+        self.assertEqual(caught.exception.code, "protected_group")
+
+    def test_group_remove_plans_then_removes_only_current_members(self):
+        fake = FakeGraph()
+        args = SimpleNamespace(group=["Team,Admins"], email=["gina@partner.com"], apply=True, allow_protected=False)
+        result = entra.cmd_group_remove(session(fake), args)
+        self.assertEqual([item["status"] for item in result["users"][0]["groups"]], ["removed", "not_member"])
+        self.assertEqual(fake.writes(), [("DELETE", f"{entra.GRAPH}/groups/{G_TEAM}/members/{GINA}/$ref")])
+
+
 class CheckTests(unittest.TestCase):
     def run_check(self, roles, invites_from, members_create=False):
         fake = FakeGraph()
         fake.routes += [
-            ("GET", r"/organization", lambda path, body: fake.ok({"value": [{"id": TENANT, "displayName": "contoso"}]})),
             ("GET", r"/me/transitiveMemberOf", lambda path, body: fake.ok({"value": roles})),
             ("GET", r"/policies/authorizationPolicy", lambda path, body: fake.ok({
                 "allowInvitesFrom": invites_from,

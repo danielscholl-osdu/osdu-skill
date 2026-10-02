@@ -1,6 +1,6 @@
 ---
 name: azure-ad
-description: Manage people and groups in a Microsoft Entra ID (Azure AD) tenant. Use when someone wants to invite an external guest or partner, onboard a group of collaborators, create a security group, add users to groups, look up a user or a group's members, find out what they are allowed to do in the tenant, or diagnose an "insufficient privileges" error on any of these.
+description: Manage people and groups in a Microsoft Entra ID (Azure AD) tenant. Use when someone wants to invite an external guest or partner, onboard a group of collaborators, create a security group, add or remove group members, write access instructions for the people invited, remove guests or delete a group when an engagement ends, look up a user or a group's members, find out what they are allowed to do in the tenant, or diagnose an "insufficient privileges" error on any of these.
 ---
 
 # Entra ID users, guests, and groups
@@ -15,12 +15,15 @@ description: Manage people and groups in a Microsoft Entra ID (Azure AD) tenant.
 | Invite guests, optionally into groups | `invite --email A,B --groups G1,G2` |
 | Create a security group | `group create --name NAME --description TEXT` |
 | Add existing users to groups | `group add --group G --email A,B` |
+| Remove users from groups | `group remove --group G --email A,B` |
+| Delete a group, optionally with its guests | `group delete --name NAME [--delete-guests]` |
+| Delete guest accounts | `offboard --email A,B` |
 
-Full options, output fields, and error codes are in [references/commands.md](references/commands.md).
+Full options, output fields, and error codes are in [references/commands.md](references/commands.md). A request that covers several of these, such as "add these people to a new group and write their instructions", is in [references/engagements.md](references/engagements.md).
 
 ## Changes are planned first, then applied
 
-`invite`, `group create`, and `group add` only plan until `--apply` is added. An invitation emails a real person outside the organization, and group membership often carries access to cloud resources, so the person asking has to see exactly what will happen before it does.
+`invite`, `group create`, `group add`, `group remove`, `group delete`, and `offboard` only plan until `--apply` is added. An invitation emails a real person outside the organization, and group membership often carries access to cloud resources, so the person asking has to see exactly what will happen before it does.
 
 1. Run the command without `--apply`.
 2. Show the plan: the tenant, each person and whether they are new or existing, each group and where it came from, anything left out and why, and whether an invitation email will be sent.
@@ -29,6 +32,17 @@ Full options, output fields, and error codes are in [references/commands.md](ref
 A request to look into, test, or troubleshoot something is not approval to change it.
 
 After applying, report what the result says for each person and group: invited, already present, added, or failed. A partial result stays partial in the summary; completed steps are not rolled back, and re-running the same command finishes only what is missing.
+
+## Deleting needs the code from the plan
+
+`group delete` and `offboard` remove things that other people depend on, and a deleted security group cannot be restored. Their plan returns a `confirm` code tied to exactly the group and accounts it listed. Applying requires that code:
+
+1. Run the command without `--apply` and show the plan in full: the group, every account that would be deleted, and every account that would be kept with its reason.
+2. When the person approves that list, run the same command with `--apply --confirm CODE`.
+
+If the membership changed in between, the code no longer matches and the script returns `plan_changed`. Plan again and show the new plan; the earlier approval was for a different list.
+
+The script keeps some accounts no matter what is asked: the signed-in account, anyone holding a directory role, and anyone who is not a guest. With `group delete --delete-guests` it also keeps guests who belong to another group, because that membership means someone else still expects them to have access. Report the kept accounts and their reasons. Deleting one of them is a separate, explicit request through `offboard`.
 
 ## The tenant must be explicit for changes
 
@@ -54,6 +68,7 @@ A role granted moments ago is not in the current token. `az logout` followed by 
 
 ## Related work
 
-- Onboarding a partner team end to end, including the Azure resource group and role assignment that usually follow: [references/partner-onboarding.md](references/partner-onboarding.md)
+- Bringing people in for an engagement and removing them afterwards, including the instructions to send them: [references/engagements.md](references/engagements.md)
+- The Azure resource group and role assignment that often follow an onboarding: [references/partner-onboarding.md](references/partner-onboarding.md)
 - Errors and what to do about each: [references/troubleshooting.md](references/troubleshooting.md)
 - OSDU or ADME entitlements are separate from Entra groups and are not handled here.

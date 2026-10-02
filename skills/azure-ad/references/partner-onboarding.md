@@ -55,4 +55,4 @@ Tell the requester what the guests should expect: an invitation email from Micro
 
 ## Removing access later
 
-Removing the role assignment or the group ends the Azure access for everyone at once. Guest accounts remain in the tenant until they are deleted, which is a separate decision.
+Removing the role assignment ends the Azure access for everyone at once. Deleting the group, and optionally the guest accounts with it, is covered in [engagements.md](engagements.md). Remove the role assignment before deleting the group, or it is left behind pointing at nothing.

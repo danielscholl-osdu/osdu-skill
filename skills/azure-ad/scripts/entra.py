@@ -7,6 +7,7 @@ JSON object on stdout. Every write is a plan unless --apply is given.
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import re
@@ -35,6 +36,8 @@ GUEST_INVITER = "95e79109-95c0-4d8e-aee3-d01accf2d47b"
 DIRECTORY_WRITERS = "9360feb5-f418-4baa-8175-e2a00bac4301"
 INVITE_ROLES = {GLOBAL_ADMIN, USER_ADMIN, GUEST_INVITER, DIRECTORY_WRITERS}
 GROUP_ROLES = {GLOBAL_ADMIN, USER_ADMIN, GROUPS_ADMIN, DIRECTORY_WRITERS}
+USER_DELETE_ROLES = {GLOBAL_ADMIN, USER_ADMIN}
+GROUP_DELETE_ROLES = {GLOBAL_ADMIN, USER_ADMIN, GROUPS_ADMIN}
 
 
 class EntraError(Exception):
@@ -231,6 +234,35 @@ class Graph:
             body["owners@odata.bind"] = [f"{GRAPH}/users/{owner}" for owner in owner_ids]
         return self.request("POST", GRAPH + "/groups", body=body)
 
+    def group_members(self, group_id):
+        return self.values(f"/groups/{group_id}/members", {"$select": USER_FIELDS, "$top": "999"})
+
+    def directory_roles(self, user_id):
+        return self.values(f"/users/{user_id}/transitiveMemberOf/microsoft.graph.directoryRole",
+                           {"$select": "displayName,roleTemplateId", "$count": "true"}, ADVANCED_QUERY)
+
+    def remove_member(self, group_id, user_id):
+        """Remove a member. Returns False when they were not a member."""
+        try:
+            self.request("DELETE", f"{GRAPH}/groups/{group_id}/members/{user_id}/$ref")
+        except EntraError as error:
+            if error.code == "http_404":
+                return False
+            raise
+        return True
+
+    def delete_user(self, user_id):
+        self.request("DELETE", f"{GRAPH}/users/{user_id}")
+
+    def delete_group(self, group_id):
+        self.request("DELETE", f"{GRAPH}/groups/{group_id}")
+
+    def organization(self):
+        items = self.values("/organization", {"$select": "id,displayName,verifiedDomains"})
+        item = items[0] if items else {}
+        domains = [d.get("name") for d in item.get("verifiedDomains") or [] if d.get("isDefault")]
+        return {"name": item.get("displayName"), "default_domain": domains[0] if domains else None}
+
 
 class Session:
     def __init__(self, graph, tenant, tenant_explicit, claims=None, protected=()):
@@ -344,8 +376,8 @@ def cmd_invite(session, args):
     if args.apply:
         session.require_explicit_tenant()
     groups, skipped = resolve_groups(session, split_values(args.groups), args.like, args.allow_protected)
-    result = {"command": "invite", "tenant": session.tenant, "applied": args.apply,
-              "send_email": args.send_email, "skipped_groups": skipped}
+    result = {"command": "invite", "tenant": session.tenant, "tenant_info": session.graph.organization(),
+              "applied": args.apply, "send_email": args.send_email, "skipped_groups": skipped}
     users = []
     for email in emails:
         entry = {"email": email}
@@ -418,6 +450,177 @@ def cmd_group_create(session, args):
     return {**result, "success": True, "status": "created", "group_id": created.get("id")}
 
 
+def is_external(user):
+    return user.get("userType") == "Guest" or "#EXT#" in (user.get("userPrincipalName") or "")
+
+
+def deletion_block(session, user, caller_id, allow_internal):
+    """Why this account must not be deleted, or None when deletion is acceptable."""
+    if user["id"] == caller_id:
+        return "this is the signed-in account"
+    roles = session.graph.directory_roles(user["id"])
+    if roles:
+        return "holds a directory role: " + ", ".join(sorted(role.get("displayName") or "" for role in roles))
+    if not is_external(user) and not allow_internal:
+        return "internal account, not a guest; deleting it needs offboard --allow-internal"
+    return None
+
+
+def confirmation_code(session, command, *parts):
+    """A code bound to exactly what the plan showed, so apply cannot act on anything else."""
+    payload = json.dumps([command, session.tenant, *parts], sort_keys=True)
+    return hashlib.sha256(payload.encode()).hexdigest()[:8]
+
+
+def require_confirmation(args, code):
+    if not args.confirm:
+        raise EntraError("confirmation_required",
+                         "Deleting needs the confirmation code from the plan. Run without --apply, show the plan, "
+                         "and pass its code with --confirm once the person approves.")
+    if args.confirm != code:
+        raise EntraError("plan_changed",
+                         "The confirmation code does not match what would be deleted now. The directory changed "
+                         "since the plan, or the code is from another plan. Plan again and show the new plan.")
+
+
+def cmd_offboard(session, args):
+    if args.apply:
+        session.require_explicit_tenant()
+    caller = session.caller()
+    entries, targets = [], []
+    for identifier in split_values(args.email):
+        entry = {"email": identifier}
+        try:
+            user = session.graph.user(identifier)
+            if user is None:
+                entry["status"] = "not_found"
+            else:
+                groups = session.graph.direct_groups(user["id"])
+                entry.update(user_id=user["id"], name=user.get("displayName"), type=user.get("userType"),
+                             groups=sorted(group["displayName"] for group in groups))
+                block = deletion_block(session, user, caller and caller["id"], args.allow_internal)
+                if block:
+                    entry.update(status="refused", error="refused", message=block)
+                else:
+                    entry["status"] = "planned"
+                    targets.append((entry, user))
+        except EntraError as error:
+            entry.update(status="failed", error=error.code, message=str(error))
+        entries.append(entry)
+    code = confirmation_code(session, "offboard", sorted(user["id"] for _, user in targets))
+    result = {"command": "offboard", "tenant": session.tenant, "applied": args.apply,
+              "note": "A deleted account loses all access at once and can be restored for 30 days."}
+    if not args.apply:
+        result["confirm"] = code if targets else None
+    else:
+        require_confirmation(args, code)
+        for entry, user in targets:
+            try:
+                session.graph.delete_user(user["id"])
+                entry["status"] = "deleted"
+            except EntraError as error:
+                entry.update(status="failed", error=error.code, message=str(error))
+    result["users"] = entries
+    result["success"] = not any(entry.get("error") for entry in entries)
+    return result
+
+
+def cmd_group_remove(session, args):
+    if args.apply:
+        session.require_explicit_tenant()
+    groups = []
+    for name in split_values(args.group):
+        group = session.graph.group(name)
+        if group is None:
+            raise EntraError("group_not_found", f"No group matches {name}.")
+        groups.append(group)
+    result = {"command": "group remove", "tenant": session.tenant, "applied": args.apply}
+    users = []
+    for identifier in split_values(args.email):
+        entry = {"email": identifier, "groups": []}
+        try:
+            user = session.graph.user(identifier)
+            if user is None:
+                raise EntraError("user_not_found", f"{identifier} is not in the tenant.")
+            entry["user_id"] = user["id"]
+            current = {group["id"] for group in session.graph.direct_groups(user["id"])}
+            for group in groups:
+                item = {"group": group["displayName"], "group_id": group["id"]}
+                if group["id"] not in current:
+                    item["status"] = "not_member"
+                elif not args.apply:
+                    item["status"] = "planned"
+                else:
+                    try:
+                        session.graph.remove_member(group["id"], user["id"])
+                        item["status"] = "removed"
+                    except EntraError as error:
+                        item.update(status="failed", error=error.code, message=str(error))
+                entry["groups"].append(item)
+        except EntraError as error:
+            entry.update(error=error.code, message=str(error))
+        users.append(entry)
+    return finish(result, users)
+
+
+def cmd_group_delete(session, args):
+    if args.apply:
+        session.require_explicit_tenant()
+    group = session.graph.group(args.name)
+    if group is None:
+        raise EntraError("group_not_found", f"No group matches {args.name}.")
+    info = describe_group(session, group)
+    if info["protected"] and not args.allow_protected:
+        raise EntraError("protected_group",
+                         f"{info['name']} is protected ({', '.join(info['protected'])}). Confirm with the user "
+                         "that deleting this privileged group is intended, then add --allow-protected.")
+    caller = session.caller()
+    members = session.graph.group_members(group["id"])
+    entries, targets = [], []
+    for member in members:
+        kind = member.get("@odata.type", "").rsplit(".", 1)[-1] or "user"
+        if kind == "user" and args.delete_guests:
+            member = session.graph.user(member["id"]) or member
+        entry = {"name": member.get("displayName"), "mail": member.get("mail") or member.get("userPrincipalName"),
+                 "kind": kind, "status": "kept"}
+        if not args.delete_guests:
+            entry["reason"] = "membership ends with the group; the account stays in the tenant"
+        elif kind != "user":
+            entry["reason"] = "not a user account"
+        else:
+            others = sorted(item["displayName"] for item in session.graph.direct_groups(member["id"])
+                            if item["id"] != group["id"])
+            block = deletion_block(session, member, caller and caller["id"], False)
+            if block:
+                entry["reason"] = block
+            elif others:
+                entry["reason"] = "also a member of: " + ", ".join(others)
+            else:
+                entry["status"] = "planned"
+                targets.append((entry, member))
+        entries.append(entry)
+    code = confirmation_code(session, "group delete", group["id"], sorted(m["id"] for m in members),
+                             sorted(user["id"] for _, user in targets))
+    result = {"command": "group delete", "tenant": session.tenant, "applied": args.apply, "group": info,
+              "members": entries,
+              "note": "Deleting a security group is permanent, and any Azure role assignment made to it is left "
+                      "orphaned. Deleted accounts can be restored for 30 days."}
+    if not args.apply:
+        return {**result, "success": True, "status": "planned", "confirm": code}
+    require_confirmation(args, code)
+    for entry, user in targets:
+        try:
+            session.graph.delete_user(user["id"])
+            entry["status"] = "deleted"
+        except EntraError as error:
+            entry.update(status="failed", error=error.code, message=str(error))
+    if any(entry["status"] == "failed" for entry in entries):
+        return {**result, "success": False, "status": "kept", "error": "partial",
+                "message": "Some accounts could not be deleted, so the group was kept as the record of who is left."}
+    session.graph.delete_group(group["id"])
+    return {**result, "success": True, "status": "deleted"}
+
+
 def cmd_group_show(session, args):
     group = session.graph.group(args.name)
     if group is None:
@@ -453,10 +656,8 @@ def cmd_user(session, args):
 
 def cmd_check(session, args):
     graph = session.graph
-    organization = graph.values("/organization", {"$select": "id,displayName"})
     result = {"command": "check", "success": True,
-              "tenant": {"id": session.tenant, "name": organization[0].get("displayName") if organization else None,
-                         "explicit": session.tenant_explicit}}
+              "tenant": {"id": session.tenant, **graph.organization(), "explicit": session.tenant_explicit}}
     caller = session.caller()
     if caller is None:
         result["identity"] = {"kind": "application", "app_id": session.claims.get("appid")}
@@ -482,6 +683,9 @@ def cmd_check(session, args):
         "create_security_groups": bool(held & GROUP_ROLES) or (members_create and is_member),
         "manage_any_group_membership": bool(held & GROUP_ROLES),
         "manage_owned_group_membership": True,
+        "delete_guest_accounts": bool(held & USER_DELETE_ROLES),
+        "delete_any_group": bool(held & GROUP_DELETE_ROLES),
+        "delete_owned_groups": True,
     }
     result["note"] = ("Capabilities are derived from directory roles and tenant policy; they are an expectation, "
                       "not a write test. Role changes need a fresh sign-in (az logout, az login) to reach the token.")
@@ -495,6 +699,9 @@ def build_parser():
     write.add_argument("--apply", action="store_true", help="Execute. Without it the command only plans.")
     write.add_argument("--allow-protected", action="store_true",
                        help="Permit a protected group that was named explicitly.")
+
+    destroy = argparse.ArgumentParser(add_help=False)
+    destroy.add_argument("--confirm", help="Confirmation code from the plan. Required with --apply.")
 
     parser = argparse.ArgumentParser(prog="entra.py", description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -517,7 +724,14 @@ def build_parser():
     invite.add_argument("--message", help="Text added to the invitation email.")
     invite.set_defaults(handler=cmd_invite)
 
-    group = commands.add_parser("group", help="Create, inspect, and populate security groups.")
+    offboard = commands.add_parser("offboard", parents=[common, write, destroy],
+                                   help="Delete guest accounts from the tenant.")
+    offboard.add_argument("--email", action="append", required=True, help="Email, UPN, or object ID.")
+    offboard.add_argument("--allow-internal", action="store_true",
+                          help="Permit deleting an account that is not a guest.")
+    offboard.set_defaults(handler=cmd_offboard)
+
+    group = commands.add_parser("group", help="Create, inspect, populate, and delete security groups.")
     actions = group.add_subparsers(dest="action", required=True)
     show = actions.add_parser("show", parents=[common], help="Group details, members, and owners.")
     show.add_argument("name", help="Group name or object ID.")
@@ -531,6 +745,15 @@ def build_parser():
     add.add_argument("--group", action="append", required=True, help="Group names or object IDs.")
     add.add_argument("--email", action="append", required=True, help="User email, UPN, or object ID.")
     add.set_defaults(handler=cmd_group_add)
+    remove = actions.add_parser("remove", parents=[common, write], help="Remove users from groups.")
+    remove.add_argument("--group", action="append", required=True, help="Group names or object IDs.")
+    remove.add_argument("--email", action="append", required=True, help="User email, UPN, or object ID.")
+    remove.set_defaults(handler=cmd_group_remove)
+    delete = actions.add_parser("delete", parents=[common, write, destroy], help="Delete a security group.")
+    delete.add_argument("--name", required=True, help="Group name or object ID.")
+    delete.add_argument("--delete-guests", action="store_true",
+                        help="Also delete guest members who are in no other group and hold no directory role.")
+    delete.set_defaults(handler=cmd_group_delete)
     return parser
 
 
