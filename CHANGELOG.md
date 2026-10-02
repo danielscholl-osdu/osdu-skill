@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/danielscholl-osdu/osdu-skill/compare/v0.1.0...v0.2.0) (2026-10-02)
+
+
+### Features
+
+* **azure-ad:** introduce azure grant revoke and subscriptions commands ([#7](https://github.com/danielscholl-osdu/osdu-skill/issues/7)) ([603d386](https://github.com/danielscholl-osdu/osdu-skill/commit/603d386557009c97e40a9ab70b7230062f217caa))
+
+
+### Skill text and documentation
+
+* lead the install instructions with the Copilot app ([#4](https://github.com/danielscholl-osdu/osdu-skill/issues/4)) ([8d8f8a1](https://github.com/danielscholl-osdu/osdu-skill/commit/8d8f8a1a1010d59995099976e12f871aaebaba1d))
+
 ## 0.1.0 (2026-10-02)
 
 
