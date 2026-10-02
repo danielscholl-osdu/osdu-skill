@@ -14,6 +14,16 @@ For a person signed in through the Azure CLI, two things decide what works: the 
 | Add a member to a role-assignable group | The person owns the group or holds Privileged Role Administrator or Global Administrator. Other roles cannot. |
 | Add a member to a dynamic group | Not possible. Membership follows the group's rule. |
 
+## Azure resources
+
+Azure access is separate from directory roles. Holding User Administrator does not let someone create a resource group.
+
+| Operation | Works when |
+|---|---|
+| List subscriptions | The person has any role on them. Subscriptions they have no role on do not appear. |
+| Create a resource group | Contributor or Owner on the subscription. |
+| Assign or remove a role on a resource group | Owner, User Access Administrator, or Role Based Access Control Administrator at that scope or above. |
+
 ## Getting a missing capability
 
 These are decisions for a tenant administrator, not steps this skill performs.

@@ -20,6 +20,11 @@ Start with `check`. It shows which tenant and identity are in use and what that 
 | `plan_changed` | The code does not match what would be deleted now. | The directory changed, or the code is from another plan. Plan again and show the new plan before applying. |
 | `refused` | The account is the signed-in account, holds a directory role, or is not a guest. | Report it as kept, with the reason. An administrator can remove a role first if deletion is really intended. |
 | `partial` | Some accounts could not be deleted, so the group was kept. | Read each member's `message`, fix the cause (usually a missing role), and plan again. |
+| `subscription_not_found` | No subscription with that name or ID is visible in the tenant. | Run `azure subscriptions`. One the person has no role on does not appear at all. |
+| `ambiguous_subscription` | Two subscriptions share the name. | Use the subscription ID. |
+| `location_required` | The resource group does not exist and no region was given. | Ask which region, then add `--location`. |
+| `role_not_found` | No Azure role has that name. | Use the exact role name, such as Reader or Contributor. |
+| `privileged_role` | The role lets its holders grant access to others. | Confirm that the whole group should have it, then add `--allow-protected`. |
 | `unsupported_group` | The group has dynamic membership. | Membership follows the group's rule and cannot be set directly. |
 | `invalid_email`, `invalid_redirect` | An email address or the redirect URL is malformed. | Correct the value; the redirect URL has to be HTTPS. |
 | `invalid_response` | Microsoft Graph returned something unexpected. | Stop and report it. Do not continue to the write on a guess. |
@@ -29,6 +34,7 @@ Start with `check`. It shows which tenant and identity are in use and what that 
 
 - **A role was just granted and `http_403` continues.** The Azure CLI is still using a token issued before the grant. `az logout`, then `az login --tenant TENANT_ID`.
 - **A guest was invited and the group step failed with `http_404`.** A new guest can take a little while to appear everywhere in the directory. The script retries for several seconds; if it still fails, run the same command again. The guest is found as existing and only the group step repeats.
+- **`azure grant` fails with `http_400` naming the principal right after the group was created.** Azure has not seen the new group yet. Run the same command again after a few seconds; the resource group step comes back as `existing`.
 - **A guest says no email arrived.** An invitation that succeeded is not proof of delivery. `user EMAIL` shows `invitation_state`; while it is `PendingAcceptance`, the guest has not redeemed. Sending again is a new outward message, so ask before doing it.
 - **`invite` reports `existing` for someone who should be new.** They are already in the tenant, possibly under an older invitation. No second invitation is sent.
 

@@ -21,6 +21,10 @@ import urllib.request
 from uuid import UUID, uuid4
 
 GRAPH = "https://graph.microsoft.com/v1.0"
+ARM = "https://management.azure.com"
+ARM_SUBSCRIPTIONS, ARM_GROUPS, ARM_AUTH = "2022-12-01", "2021-04-01", "2022-04-01"
+# Roles that let the holder grant access to others.
+PRIVILEGED_ROLES = {"owner", "user access administrator", "role based access control administrator"}
 TIMEOUT = 30
 TENANT_VARS = ("ENTRA_TENANT_ID", "AZURE_TENANT_ID", "AI_OSDU_TENANT_ID")
 PROTECTED_VAR = "ENTRA_PROTECTED_GROUPS"
@@ -80,11 +84,11 @@ def token_claims(token):
     return claims
 
 
-def az_token(tenant=None, run=subprocess.run, which=shutil.which):
+def az_token(tenant=None, run=subprocess.run, which=shutil.which, resource="https://graph.microsoft.com"):
     az = which("az")
     if not az:
         raise EntraError("az_missing", "Azure CLI (az) is not installed or not on PATH.")
-    command = [az, "account", "get-access-token", "--resource", "https://graph.microsoft.com", "-o", "json"]
+    command = [az, "account", "get-access-token", "--resource", resource, "-o", "json"]
     if tenant:
         command += ["--tenant", tenant]
     login = "az login" + (f" --tenant {tenant}" if tenant else "")
@@ -116,14 +120,15 @@ def http(method, url, headers, body):
 
 
 class Graph:
-    def __init__(self, token, transport=http, sleep=time.sleep):
+    def __init__(self, token, transport=http, sleep=time.sleep, base=GRAPH):
         self.token = token
         self.transport = transport
         self.sleep = sleep
+        self.base = base
 
     def request(self, method, url, params=None, body=None, headers=None):
-        if not url.startswith(GRAPH + "/"):
-            raise EntraError("invalid_response", "Refusing to send the Graph token to a non-Graph URL.")
+        if not url.startswith(self.base + "/"):
+            raise EntraError("invalid_response", "Refusing to send the token to a URL outside its API.")
         if params:
             url += "?" + urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
         headers = {"Authorization": f"Bearer {self.token}", "Accept": "application/json", **(headers or {})}
@@ -150,10 +155,10 @@ class Graph:
         return payload
 
     def get(self, path, params=None, headers=None):
-        return self.request("GET", GRAPH + path, params=params, headers=headers)
+        return self.request("GET", self.base + path, params=params, headers=headers)
 
     def values(self, path, params=None, headers=None):
-        url, items, seen = GRAPH + path, [], set()
+        url, items, seen = self.base + path, [], set()
         while url:
             if url in seen:
                 raise EntraError("invalid_response", "Graph repeated a pagination URL.")
@@ -163,7 +168,7 @@ class Graph:
             if not isinstance(page.get("value"), list):
                 raise EntraError("invalid_response", "Graph returned an invalid collection.")
             items += page["value"]
-            url = page.get("@odata.nextLink")
+            url = page.get("@odata.nextLink") or page.get("nextLink")
         return items
 
     def user(self, identifier):
@@ -265,8 +270,10 @@ class Graph:
 
 
 class Session:
-    def __init__(self, graph, tenant, tenant_explicit, claims=None, protected=()):
+    def __init__(self, graph, tenant, tenant_explicit, claims=None, protected=(), arm_source=None):
         self.graph = graph
+        self.arm_source = arm_source
+        self._arm = None
         self.tenant = tenant
         self.tenant_explicit = tenant_explicit
         self.claims = claims or {}
@@ -286,6 +293,15 @@ class Session:
         if group["displayName"].lower() in self.protected or group["id"].lower() in self.protected:
             reasons.append(f"listed in {PROTECTED_VAR}")
         return reasons
+
+    @property
+    def arm(self):
+        """Azure Resource Manager client, signed in only when an Azure command needs it."""
+        if self._arm is None:
+            if self.arm_source is None:
+                raise EntraError("auth_failed", "No Azure Resource Manager session is available.")
+            self._arm = self.arm_source()
+        return self._arm
 
     def caller(self):
         if "scp" not in self.claims:
@@ -601,10 +617,14 @@ def cmd_group_delete(session, args):
         entries.append(entry)
     code = confirmation_code(session, "group delete", group["id"], sorted(m["id"] for m in members),
                              sorted(user["id"] for _, user in targets))
+    try:
+        access = azure_access(session, group["id"])
+    except EntraError as error:
+        access = f"not checked ({error.code})"
     result = {"command": "group delete", "tenant": session.tenant, "applied": args.apply, "group": info,
-              "members": entries,
-              "note": "Deleting a security group is permanent, and any Azure role assignment made to it is left "
-                      "orphaned. Deleted accounts can be restored for 30 days."}
+              "members": entries, "azure_access": access,
+              "note": "Deleting a security group is permanent. Anything under azure_access is left orphaned unless "
+                      "it is removed first with azure revoke. Deleted accounts can be restored for 30 days."}
     if not args.apply:
         return {**result, "success": True, "status": "planned", "confirm": code}
     require_confirmation(args, code)
@@ -619,6 +639,146 @@ def cmd_group_delete(session, args):
                 "message": "Some accounts could not be deleted, so the group was kept as the record of who is left."}
     session.graph.delete_group(group["id"])
     return {**result, "success": True, "status": "deleted"}
+
+
+def subscriptions(session):
+    items = session.arm.values("/subscriptions", {"api-version": ARM_SUBSCRIPTIONS})
+    return [{"id": item["subscriptionId"], "name": item.get("displayName"), "state": item.get("state")}
+            for item in items if (item.get("tenantId") or session.tenant).lower() == session.tenant.lower()]
+
+
+def resolve_subscription(session, identifier):
+    matches = [sub for sub in subscriptions(session)
+               if identifier.lower() in (sub["id"].lower(), (sub["name"] or "").lower())]
+    if not matches:
+        raise EntraError("subscription_not_found",
+                         f"No subscription named or numbered {identifier} is visible in this tenant. "
+                         "List them with: azure subscriptions")
+    if len(matches) > 1:
+        raise EntraError("ambiguous_subscription", f"{len(matches)} subscriptions are named {identifier}; use the ID.")
+    return matches[0]
+
+
+def role_definition(session, subscription_id, role):
+    found = session.arm.values(f"/subscriptions/{subscription_id}/providers/Microsoft.Authorization/roleDefinitions",
+                               {"$filter": f"roleName eq '{quoted(role)}'", "api-version": ARM_AUTH})
+    if not found:
+        raise EntraError("role_not_found", f"No Azure role is named {role}. Common ones: Reader, Contributor.")
+    return found[0]["id"], found[0]["properties"]["roleName"]
+
+
+def group_assignments(session, scope, group_id):
+    """Role assignments the group holds at this scope or inherited from above it."""
+    return session.arm.values(f"{scope}/providers/Microsoft.Authorization/roleAssignments",
+                              {"$filter": f"principalId eq '{group_id}'", "api-version": ARM_AUTH})
+
+
+def resolve_azure_target(session, args):
+    group = session.graph.group(args.group)
+    if group is None:
+        raise EntraError("group_not_found", f"No group matches {args.group}.")
+    subscription = resolve_subscription(session, args.subscription)
+    scope = f"/subscriptions/{subscription['id']}/resourceGroups/{args.resource_group}"
+    try:
+        existing = session.arm.get(f"/subscriptions/{subscription['id']}/resourcegroups/{args.resource_group}",
+                                   {"api-version": ARM_GROUPS})
+    except EntraError as error:
+        if error.code != "http_404":
+            raise
+        existing = None
+    return group, subscription, scope, existing
+
+
+def cmd_azure_subscriptions(session, args):
+    return {"command": "azure subscriptions", "tenant": session.tenant, "success": True,
+            "subscriptions": sorted(subscriptions(session), key=lambda sub: sub["name"] or "")}
+
+
+def cmd_azure_grant(session, args):
+    if args.apply:
+        session.require_explicit_tenant()
+    if args.role.lower() in PRIVILEGED_ROLES and not args.allow_protected:
+        raise EntraError("privileged_role",
+                         f"{args.role} lets its holders grant access to others. Confirm with the user that the "
+                         "whole group should have that, then add --allow-protected.")
+    group, subscription, scope, existing = resolve_azure_target(session, args)
+    role_id, role_name = role_definition(session, subscription["id"], args.role)
+    result = {"command": "azure grant", "tenant": session.tenant, "applied": args.apply,
+              "subscription": subscription, "group": group["displayName"], "group_id": group["id"],
+              "role": role_name, "scope": scope}
+    if existing:
+        result["resource_group"] = {"name": args.resource_group, "status": "existing", "location": existing.get("location")}
+    elif not args.location:
+        raise EntraError("location_required",
+                         f"Resource group {args.resource_group} does not exist in {subscription['name']}. "
+                         "Creating it needs --location, for example eastus.")
+    else:
+        result["resource_group"] = {"name": args.resource_group, "status": "planned", "location": args.location}
+    held = group_assignments(session, scope, group["id"]) if existing else []
+    same = [item for item in held if item["properties"]["roleDefinitionId"].lower() == role_id.lower()
+            and item["properties"]["scope"].lower() == scope.lower()]
+    result["assignment"] = {"status": "existing" if same else "planned"}
+    if not args.apply:
+        return {**result, "success": True}
+    if not existing:
+        session.arm.request("PUT", f"{ARM}/subscriptions/{subscription['id']}/resourcegroups/{args.resource_group}",
+                            params={"api-version": ARM_GROUPS}, body={"location": args.location})
+        result["resource_group"]["status"] = "created"
+    if not same:
+        session.arm.request("PUT", f"{ARM}{scope}/providers/Microsoft.Authorization/roleAssignments/{uuid4()}",
+                            params={"api-version": ARM_AUTH},
+                            body={"properties": {"roleDefinitionId": role_id, "principalId": group["id"],
+                                                 "principalType": "Group"}})
+        result["assignment"]["status"] = "created"
+    return {**result, "success": True}
+
+
+def cmd_azure_revoke(session, args):
+    if args.apply:
+        session.require_explicit_tenant()
+    group, subscription, scope, existing = resolve_azure_target(session, args)
+    result = {"command": "azure revoke", "tenant": session.tenant, "applied": args.apply,
+              "subscription": subscription, "group": group["displayName"], "scope": scope,
+              "note": "Only the group's access is removed. The resource group and what is in it are left alone."}
+    if not existing:
+        return {**result, "success": True, "assignments": [], "resource_group": "not found"}
+    direct = [item for item in group_assignments(session, scope, group["id"])
+              if item["properties"]["scope"].lower() == scope.lower()]
+    entries = []
+    for item in direct:
+        definition = session.arm.get(item["properties"]["roleDefinitionId"], {"api-version": ARM_AUTH})
+        entry = {"role": definition["properties"]["roleName"], "status": "planned"}
+        if args.apply:
+            try:
+                session.arm.request("DELETE", ARM + item["id"], params={"api-version": ARM_AUTH})
+                entry["status"] = "removed"
+            except EntraError as error:
+                entry.update(status="failed", error=error.code, message=str(error))
+        entries.append(entry)
+    return {**result, "assignments": entries, "success": not any(entry.get("error") for entry in entries)}
+
+
+def azure_access(session, group_id):
+    """Every Azure role the group holds in the tenant's subscriptions."""
+    names, found = {}, []
+    for subscription in subscriptions(session):
+        for item in group_assignments(session, f"/subscriptions/{subscription['id']}", group_id):
+            role_id = item["properties"]["roleDefinitionId"]
+            if role_id not in names:
+                names[role_id] = session.arm.get(role_id, {"api-version": ARM_AUTH})["properties"]["roleName"]
+            entry = {"subscription": subscription["name"], "role": names[role_id], "scope": item["properties"]["scope"]}
+            if entry not in found:
+                found.append(entry)
+    return found
+
+
+def cmd_azure_access(session, args):
+    group = session.graph.group(args.group)
+    if group is None:
+        raise EntraError("group_not_found", f"No group matches {args.group}.")
+    return {"command": "azure access", "tenant": session.tenant, "success": True,
+            "group": group["displayName"], "group_id": group["id"],
+            "assignments": azure_access(session, group["id"])}
 
 
 def cmd_group_show(session, args):
@@ -754,6 +914,26 @@ def build_parser():
     delete.add_argument("--delete-guests", action="store_true",
                         help="Also delete guest members who are in no other group and hold no directory role.")
     delete.set_defaults(handler=cmd_group_delete)
+
+    azure = commands.add_parser("azure", help="Subscriptions, and a group's access to resource groups.")
+    areas = azure.add_subparsers(dest="action", required=True)
+    listing = areas.add_parser("subscriptions", parents=[common], help="Subscriptions in the tenant.")
+    listing.set_defaults(handler=cmd_azure_subscriptions)
+    access = areas.add_parser("access", parents=[common], help="Azure roles a group holds, across subscriptions.")
+    access.add_argument("--group", required=True, help="Group name or object ID.")
+    access.set_defaults(handler=cmd_azure_access)
+    target = argparse.ArgumentParser(add_help=False)
+    target.add_argument("--subscription", required=True, help="Subscription name or ID.")
+    target.add_argument("--resource-group", required=True)
+    target.add_argument("--group", required=True, help="Group name or object ID.")
+    grant = areas.add_parser("grant", parents=[common, write, target],
+                             help="Give a group a role on a resource group, creating the resource group if needed.")
+    grant.add_argument("--role", default="Contributor", help="Azure role name. Defaults to Contributor.")
+    grant.add_argument("--location", help="Region for a new resource group, for example eastus.")
+    grant.set_defaults(handler=cmd_azure_grant)
+    revoke = areas.add_parser("revoke", parents=[common, write, target],
+                              help="Remove a group's roles from a resource group.")
+    revoke.set_defaults(handler=cmd_azure_revoke)
     return parser
 
 
@@ -770,8 +950,10 @@ def main(argv=None, env=None, token_source=az_token):
                       "protected_groups": split_values([env.get(PROTECTED_VAR, "")])}
         else:
             token, claims = token_source(configured)
-            session = Session(Graph(token), claims["tid"], bool(configured), claims,
-                              split_values([env.get(PROTECTED_VAR, "")]))
+            tenant = claims["tid"]
+            session = Session(Graph(token), tenant, bool(configured), claims,
+                              split_values([env.get(PROTECTED_VAR, "")]),
+                              lambda: Graph(token_source(tenant, resource=ARM)[0], base=ARM))
             result = args.handler(session, args)
     except EntraError as error:
         result = {"success": False, "error": error.code, "message": str(error)}

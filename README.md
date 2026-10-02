@@ -4,7 +4,7 @@ A GitHub Copilot plugin with skills for people who run OSDU on Azure.
 
 | Skill | What it does |
 |---|---|
-| [`azure-ad`](skills/azure-ad/SKILL.md) | Invite guests, create and delete security groups, manage membership, write access instructions, and remove people when an engagement ends, in a Microsoft Entra ID tenant. |
+| [`azure-ad`](skills/azure-ad/SKILL.md) | Invite guests, create and delete security groups, manage membership, give a group access to an Azure resource group, write access instructions, and remove people when an engagement ends, in a Microsoft Entra ID tenant. |
 | [`design-doc`](skills/design-doc/SKILL.md) | Write design documents and audit or review findings as a self-contained HTML page with a consistent voice, diagrams, and evidence. |
 | [`gh-voice`](skills/gh-voice/SKILL.md) | Tone and structure for pull request descriptions, issues, and review comments. |
 
@@ -69,6 +69,8 @@ Ask Copilot in plain language, in the app or the CLI:
 
 - "What can I do in this tenant?"
 - "Add alex@partner.com and sam@partner.com to my tenant, put them in a new group called Webinar, and write instructions I can send them on how to get in."
+- "Create a resource group called webinar-rg in the Collab subscription and give the Webinar group access to it."
+- "What subscriptions are in this tenant?"
 - "The webinar is over. Remove the Webinar group and its users."
 - "Who is in the Platform Readers group?"
 - "I get insufficient privileges when I invite a guest. Why?"
