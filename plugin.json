@@ -5,7 +5,7 @@
   "author": {
     "name": "Daniel Scholl"
   },
-  "license": "Apache-2.0",
+  "license": "MIT",
   "homepage": "https://github.com/danielscholl-osdu/osdu-skill",
   "repository": "https://github.com/danielscholl-osdu/osdu-skill",
   "keywords": [
