@@ -57,7 +57,16 @@
           "jsonpath": "$.plugins[0].version"
         }
       ],
-      "initial-version": "0.1.0"
+      "initial-version": "0.1.0",
+      "exclude-paths": [
+        "README.md",
+        "CONTRIBUTING.md",
+        "LICENSE",
+        ".gitignore",
+        ".github/workflows",
+        "tests",
+        "release-please-config.json"
+      ]
     }
   }
 }

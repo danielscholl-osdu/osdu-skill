@@ -51,7 +51,7 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 |---|---|---|
 | `feat:` | A new skill, command, or capability | Minor version |
 | `fix:` | A behaviour that was wrong | Patch version |
-| `docs:` | Skill text, references, README | Listed in the notes, no bump on its own |
+| `docs:` | Skill text and references | Patch version |
 | `chore:`, `test:`, `ci:`, `refactor:` | Everything else | Not listed |
 
 A breaking change adds `!` after the type (`feat!:`), and says what breaks in the body.
@@ -60,7 +60,7 @@ A breaking change adds `!` after the type (`feat!:`), and says what breaks in th
 
 `main` is where work lands. People who installed the plugin from the marketplace do not get `main`; they get the last release, because the marketplace entry installs from the `release` branch and only the release workflow moves that branch.
 
-1. Every push to `main` opens or updates one pull request titled "chore(main): release X.Y.Z". It holds the changelog and the version bump for everything merged since the last release.
+1. A push to `main` that changes what ships in the plugin (`skills/`, `plugin.json`, or the marketplace file) opens or updates one pull request titled "chore(main): release X.Y.Z". It holds the changelog and the version bump for everything merged since the last release. Changes to the README, this guide, tests, or workflows do not open one.
 2. To release, review that pull request and merge it. That is the only step, and nothing reaches users until it happens.
 3. Merging creates the tag `vX.Y.Z` and the GitHub release, and moves the `release` branch to that tag.
 
