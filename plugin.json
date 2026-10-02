@@ -1,0 +1,13 @@
+{
+  "name": "osdu",
+  "description": "Skills for operating OSDU on Azure with GitHub Copilot. Includes Microsoft Entra ID guest, group, and access management.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Daniel Scholl"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/danielscholl-osdu/osdu-skill",
+  "repository": "https://github.com/danielscholl-osdu/osdu-skill",
+  "keywords": ["osdu", "azure", "entra-id", "azure-ad", "identity"],
+  "skills": "skills/"
+}
