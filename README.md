@@ -12,11 +12,17 @@ A GitHub Copilot plugin with skills for people who run OSDU on Azure.
 
 ### GitHub Copilot app
 
-1. Open **Customize** and select **Add**, then choose to install a plugin.
-2. In the **Install plugin** dialog, enter `osdu@danielscholl-osdu/osdu-skill` and select **Install**.
-3. On the **Skills** tab, make sure `azure-ad`, `design-doc`, and `gh-voice` are switched on.
+1. Add the marketplace once. In a terminal:
 
-This installs the latest release.
+   ```bash
+   copilot plugin marketplace add danielscholl-osdu/osdu-skill
+   ```
+
+2. In the app, open **Customize** and select **Add**, then choose to install a plugin.
+3. In the **Install plugin** dialog, enter `osdu@osdu-skill` and select **Install**.
+4. On the **Skills** tab, make sure `azure-ad`, `design-doc`, and `gh-voice` are switched on.
+
+This installs the latest release. The name is the plugin (`osdu`) followed by the marketplace (`osdu-skill`); the dialog does not accept the repository path.
 
 ### Copilot CLI
 
