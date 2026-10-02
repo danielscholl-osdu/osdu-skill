@@ -1,6 +1,6 @@
 {
   "name": "osdu",
-  "description": "Skills for operating OSDU on Azure with GitHub Copilot: Microsoft Entra ID guest, group, and access management, and design documents and audit reports in a consistent format.",
+  "description": "Skills for operating OSDU on Azure with GitHub Copilot: Microsoft Entra ID guest, group, and access management; design documents and audit reports in a consistent format; and a house voice for pull requests, issues, and comments.",
   "version": "0.1.0",
   "author": {
     "name": "Daniel Scholl"
@@ -9,13 +9,15 @@
   "homepage": "https://github.com/danielscholl-osdu/osdu-skill",
   "repository": "https://github.com/danielscholl-osdu/osdu-skill",
   "keywords": [
-    "osdu",
+    "audit",
     "azure",
-    "entra-id",
     "azure-ad",
-    "identity",
     "design-doc",
-    "audit"
+    "entra-id",
+    "identity",
+    "osdu",
+    "pull-request",
+    "writing"
   ],
   "skills": "skills/"
 }

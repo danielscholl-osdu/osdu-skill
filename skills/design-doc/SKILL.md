@@ -89,7 +89,7 @@ These come out, because each one costs the reader attention without telling them
 
 **Identifiers.** A design uses synthetic placeholders for private identifiers: user and object IDs, subscription and tenant IDs, email addresses, personal names. A findings report is often about exactly those things, so it keeps the real ones its audience needs and is treated as private to that audience; produce a version with placeholders when the person asks for one to share more widely. Public technical identifiers, such as published role-definition IDs and API names, stay in both. Secrets never appear in either.
 
-Repository requirements take precedence over this voice. It covers the document itself; a pull request or issue body requested alongside follows that repository's own conventions.
+Repository requirements take precedence over this voice. It covers the document itself; a pull request or issue body requested alongside is written with the `gh-voice` skill.
 
 ## Method and completion
 
